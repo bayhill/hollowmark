@@ -3127,11 +3127,20 @@ export class GameScene extends Phaser.Scene {
 
     // beam of light for rare and above — the moment that matters
     const isBig = g.rarity !== "common" && g.rarity !== "magic";
+
+    // every drop rests in a soft pool of its rarity's light (bloom makes it glow)
+    const pool = this.add
+      .ellipse(0, 3, isBig ? 46 : 30, isBig ? 22 : 15, color, isBig ? 0.3 : 0.17)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    container.add(pool);
+    this.tweens.add({ targets: pool, scaleX: 1.16, scaleY: 1.16, alpha: isBig ? 0.5 : 0.28, duration: 950, yoyo: true, repeat: -1 });
+
     if (isBig) {
-      const beamOuter = this.add.rectangle(0, -52, 12, 96, color, 0.18).setOrigin(0.5, 0.5);
-      const beamInner = this.add.rectangle(0, -52, 4, 96, color, 0.45).setOrigin(0.5, 0.5);
-      container.add([beamOuter, beamInner]);
-      this.tweens.add({ targets: [beamOuter, beamInner], alpha: 0.5, duration: 700, yoyo: true, repeat: -1 });
+      const beamOuter = this.add.rectangle(0, -54, 13, 104, color, 0.16).setOrigin(0.5, 0.5);
+      const beamInner = this.add.rectangle(0, -54, 5, 104, color, 0.45).setOrigin(0.5, 0.5);
+      const beamCore = this.add.rectangle(0, -54, 1.6, 104, 0xffffff, 0.55).setOrigin(0.5, 0.5); // a bright core for bloom to catch
+      container.add([beamOuter, beamInner, beamCore]);
+      this.tweens.add({ targets: [beamOuter, beamInner, beamCore], alpha: 0.6, duration: 700, yoyo: true, repeat: -1 });
     }
 
     // the item itself, drawn as its icon when we have one
