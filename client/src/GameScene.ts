@@ -34,8 +34,8 @@ import {
   mercClassById,
   encounterById,
   townNpcById,
-} from "@arpg/common";
-import type { TownBuilding, TownStyle } from "@arpg/common";
+} from "@hollowmark/common";
+import type { TownBuilding, TownStyle } from "@hollowmark/common";
 import { Sfx } from "./sfx";
 import { ensureItemIcons } from "./icons";
 import { buildMonsterFigure } from "./mobArt";

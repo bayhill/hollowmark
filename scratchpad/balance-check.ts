@@ -7,7 +7,7 @@ import {
   floorHpMult, floorDmgMult, campPackSize, eliteChanceFor, CHAMPION_CHANCE,
   dangerFor, ACT_FLOORS, DIFF_DANGER_OFFSET, MONSTERS,
   BOSS_GUARANTEED_DROPS, BOSS_EXTRA_DROP_CHANCE,
-} from "@arpg/common";
+} from "@hollowmark/common";
 
 const N = 300_000;
 const pct = (x: number) => (x * 100).toFixed(2) + "%";

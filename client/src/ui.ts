@@ -27,7 +27,7 @@ import {
   runewordByName,
   sellValue,
   skillDamageMult,
-} from "@arpg/common";
+} from "@hollowmark/common";
 
 export interface Sheet {
   dmgMin: number;

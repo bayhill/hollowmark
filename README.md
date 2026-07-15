@@ -1,6 +1,6 @@
-# web-arpg
+# Hollowmark
 
-Browser-based multiplayer isometric ARPG in the tradition of the late-90s greats — with a world, bestiary, and legendarium all its own. Phase 0: the walking skeleton — authoritative server, isometric map, click-to-move, multiple players in one room.
+Browser-based multiplayer isometric ARPG in the tradition of the late-90s greats — with a world, bestiary, and legendarium all its own: four acts down a dying caravan road into an endless abyss, six classes with two skill trees each, sockets/runewords/jewels, co-op parties on an authoritative server, and a hardcore permadeath vow for those who dare.
 
 ## Stack
 

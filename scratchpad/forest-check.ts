@@ -1,4 +1,4 @@
-import { generateDungeon, makeMap, canStand, TILE, TOWN, generateCowLevel } from "@arpg/common";
+import { generateDungeon, makeMap, canStand, TILE, TOWN, generateCowLevel } from "@hollowmark/common";
 
 const tileOf = (w: number) => Math.floor(w / TILE);
 

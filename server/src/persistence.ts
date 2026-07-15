@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { Attributes, EquipSlot, Item, MercSlot, themeIndexForFloor } from "@arpg/common";
+import { Attributes, EquipSlot, Item, MercSlot, themeIndexForFloor } from "@hollowmark/common";
 
 // Dead-simple file-backed profiles: one JSON per player key.
 // The key is a client-generated UUID kept in localStorage — no accounts, no

@@ -22,7 +22,7 @@ import {
   xpForNext,
   MAX_LEVEL,
   paragonXpForNext,
-} from "@arpg/common";
+} from "@hollowmark/common";
 import { CharacterPanel, InventoryPanel, SkillPanel, rarityColorStr, statLines } from "./ui";
 import { ensureItemIcons } from "./icons";
 import type { GameScene } from "./GameScene";

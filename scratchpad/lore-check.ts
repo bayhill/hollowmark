@@ -9,7 +9,7 @@ import {
   generateFixedItem, STAT_POINTS_PER_LEVEL, SKILL_POINTS_PER_LEVEL, CLASSES,
   PARAGON_PERKS, paragonPerkById, paragonXpForNext, CURRENT_SEASON, RIFT_ACT, RIFT_KILL_GOAL,
   riftDangerFor, ABYSS_ACT, ACTS,
-} from "@arpg/common";
+} from "@hollowmark/common";
 
 // TOWN.<tile> entries are stored as world-pixel centers; footprints use tile indices
 const tileOf = (v: { x: number; y: number }) => ({ x: Math.floor(v.x / TILE), y: Math.floor(v.y / TILE) });

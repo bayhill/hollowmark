@@ -1,5 +1,5 @@
 import { Client } from "colyseus.js";
-import { TOWN } from "@arpg/common";
+import { TOWN } from "@hollowmark/common";
 async function main() {
   const c = new Client("ws://localhost:2567");
   const r = await c.create("dungeon", { key: `mp${Date.now().toString(36)}`, cls: "barbarian", name: "Probe" });

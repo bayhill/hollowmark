@@ -1,5 +1,5 @@
 {
-  "name": "@arpg/server",
+  "name": "@hollowmark/server",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -7,7 +7,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@arpg/common": "*",
+    "@hollowmark/common": "*",
     "@colyseus/schema": "^3.0.0",
     "colyseus": "^0.16.0"
   },

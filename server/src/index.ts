@@ -3,7 +3,7 @@ import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { DungeonRoom } from "./rooms/DungeonRoom";
 import { listProfiles, loadProfile, validKey } from "./persistence";
-import { CURRENT_SEASON } from "@arpg/common";
+import { CURRENT_SEASON } from "@hollowmark/common";
 
 const port = Number(process.env.PORT || 2567);
 

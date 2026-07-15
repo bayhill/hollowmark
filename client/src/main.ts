@@ -34,10 +34,10 @@ function showCreationScreen(): Promise<{ cls: string; name: string; hardcore: bo
     const cards = new Map<string, HTMLDivElement>();
 
     const h1 = document.createElement("div");
-    h1.textContent = "STAY AWHILE AND LISTEN";
+    h1.textContent = "HOLLOWMARK";
     h1.style.cssText = "font-size: 26px; letter-spacing: 6px; color: #e8d8a8; margin-bottom: 6px; text-shadow: 0 0 18px #d8b13a44;";
     const h2 = document.createElement("div");
-    h2.textContent = "— choose who descends into the dark —";
+    h2.textContent = "— stay awhile and listen · choose who descends —";
     h2.style.cssText = "font-size: 12px; color: #8a8a96; margin-bottom: 34px; font-style: italic;";
 
     const row = document.createElement("div");
@@ -157,7 +157,7 @@ function showLobby(): Promise<{ mode: "create"; difficulty: number } | { mode: "
     `;
 
     const h1 = document.createElement("div");
-    h1.textContent = "HOLLOWMERE LOBBY";
+    h1.textContent = "HOLLOWMARK";
     h1.style.cssText = "font-size: 24px; letter-spacing: 5px; color: #e8d8a8; margin-bottom: 6px; text-shadow: 0 0 18px #d8b13a44;";
     const h2 = document.createElement("div");
     h2.textContent = "— join a party, or descend alone —";

@@ -1,5 +1,5 @@
 import { Client } from "colyseus.js";
-import { TILE, TOWN, makeMap, isInTown } from "@arpg/common";
+import { TILE, TOWN, makeMap, isInTown } from "@hollowmark/common";
 
 const tileOf = (w: number) => Math.floor(w / TILE);
 function bfs(map: any, from: [number, number], to: [number, number]): Array<[number, number]> | null {

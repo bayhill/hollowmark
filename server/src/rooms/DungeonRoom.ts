@@ -364,7 +364,7 @@ import {
   pickMonsterKind,
   rollDamage,
   xpForNext,
-} from "@arpg/common";
+} from "@hollowmark/common";
 
 // dev/test affordances (the smoke suite's deterministic self-kill) — off in production
 const TEST_HOOKS = process.env.NODE_ENV !== "production" && process.env.ARPG_PROD !== "1";
