@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
+import { Atmosphere } from "./atmosphere";
 import {
   TILE,
   TILE_W,
@@ -189,6 +190,7 @@ export class GameScene extends Phaser.Scene {
   private moteCount = 0;
   private lastMoteAt = 0;
   private lightImg?: Phaser.GameObjects.Image;
+  private atmosphere?: Atmosphere;
   private lightScaleCur = 3;
   private stairsFx?: Phaser.GameObjects.Container;
   private pendingStairs = false; // clicked the stairs — walk over and descend
@@ -272,6 +274,10 @@ export class GameScene extends Phaser.Scene {
       if (this.ui?.chatActive) return;
       if (this.lightImg) this.lightImg.setVisible(!this.lightImg.visible);
     });
+
+    // atmosphere: bloom + vignette + per-zone color wash & ambient motes
+    this.atmosphere = new Atmosphere(this);
+    this.atmosphere.setup();
 
     // that iconic close-up dungeon feel; mouse wheel adjusts
     this.cameras.main.setZoom(WORLD_ZOOM);
@@ -1459,6 +1465,7 @@ export class GameScene extends Phaser.Scene {
     const rmFloor = this.room?.state.floor ?? 1;
     const themeIdx = visualThemeFor(rmAct, rmFloor);
     this.ensureThemeTextures(themeIdx);
+    this.atmosphere?.applyTheme(themeIdx);
     const rmCreep = Math.max(0, Math.min(1, (dangerFor(rmAct, rmFloor) - 1) / 27));
     this.sfx.setAmbient(themeIdx, rmCreep);
     // updateAmbientLocation only overrides these when you cross the town boundary
