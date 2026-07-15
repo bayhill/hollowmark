@@ -10,33 +10,38 @@ renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.25;
 app.appendChild(renderer.domElement);
 
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07070c);
-scene.fog = new THREE.FogExp2(0x07070c, 0.0011);
+// dark indigo, not near-black, so distant geometry doesn't vanish into the void
+scene.background = new THREE.Color(0x14182a);
+scene.fog = new THREE.FogExp2(0x14182a, 0.00055);
 
 export const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 1, 6000);
 camera.position.set(400, 560, 400);
 
-// cold ambient gloom
-const ambient = new THREE.HemisphereLight(0x3a4a6a, 0x0a0a12, 0.55);
+// sky/ground ambient fill — bright enough to actually read the room, still cool & moody
+const ambient = new THREE.HemisphereLight(0x556688, 0x1a1a24, 1.55);
 scene.add(ambient);
+// a flat fill so no face falls fully black
+const fill = new THREE.AmbientLight(0x404860, 0.55);
+scene.add(fill);
 
-// a dim "moon" for soft directional shadows, kept over the hero
-export const moon = new THREE.DirectionalLight(0x8496c0, 0.35);
+// the "moon": the key directional light — gives the voxels form and shadow
+export const moon = new THREE.DirectionalLight(0xaebbe0, 1.35);
 moon.castShadow = true;
 moon.shadow.mapSize.set(2048, 2048);
 moon.shadow.camera.near = 10;
 moon.shadow.camera.far = 2200;
+moon.shadow.bias = -0.0006;
 const sc = moon.shadow.camera as THREE.OrthographicCamera;
 sc.left = -760; sc.right = 760; sc.top = 760; sc.bottom = -760;
 scene.add(moon);
 scene.add(moon.target);
 
-// the warm torch that rides with the hero through the dark
-export const torch = new THREE.PointLight(0xffb060, 3.2, 680, 1.4);
+// the warm torch that rides with the hero — accent warmth over the cool key light
+export const torch = new THREE.PointLight(0xffb060, 5.0, 780, 1.3);
 torch.castShadow = true;
 torch.shadow.mapSize.set(1024, 1024);
 scene.add(torch);
