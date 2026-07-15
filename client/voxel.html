@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hollowmark — voxel prototype</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #08080d; overflow: hidden; }
+      #app { width: 100%; height: 100%; }
+      canvas { display: block; }
+      #hud {
+        position: fixed; top: 12px; left: 14px; z-index: 10;
+        font-family: monospace; color: #d8c8a0; font-size: 13px; letter-spacing: 1px;
+        text-shadow: 0 0 8px #000; pointer-events: none; line-height: 1.5;
+      }
+      #hud b { color: #e8d8a8; letter-spacing: 3px; }
+      #hud .dim { color: #7a7a86; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud">
+      <b>HOLLOWMARK</b> <span class="dim">· voxel prototype</span><br />
+      <span id="status" class="dim">connecting to the forge…</span><br />
+      <span class="dim">left-click ground to walk · drag to orbit · wheel to zoom</span>
+    </div>
+    <script type="module" src="/src/voxel/main.ts"></script>
+  </body>
+</html>
