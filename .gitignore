@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# vite cache
+.vite/
+**/.vite/
+
+# runtime data (server-side persistence)
+server/data/
+data/
+
+# env & secrets
+.env
+.env.*
+*.local
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
