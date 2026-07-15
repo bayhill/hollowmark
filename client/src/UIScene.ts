@@ -1625,8 +1625,10 @@ export class UIScene extends Phaser.Scene {
       const key = this.add.text(x + 4, y0 + 3, e.keyLabel, {
         fontFamily: "monospace", fontSize: "13px", color: "#ffd54a", fontStyle: "bold",
       });
+      // keep the label inside its cell — long skill names were smearing across neighbors
+      const shortName = e.name.length > 10 ? e.name.slice(0, 9) + "…" : e.name;
       const name = this.add
-        .text(x + CELL / 2, y0 + CELL + 4, e.name, { fontFamily: "monospace", fontSize: "11px", color: "#8a8a96" })
+        .text(x + CELL / 2, y0 + CELL + 4, shortName, { fontFamily: "monospace", fontSize: "9px", color: "#8a8a96" })
         .setOrigin(0.5, 0);
       this.hotbarRoot!.add([bg, key, name]);
       if (e.mana > 0) {
