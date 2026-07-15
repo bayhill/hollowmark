@@ -13,13 +13,21 @@ import { buildTerrain } from "./world";
 import {
   makeAvatar, updateAvatar, removeAvatar, triggerSwing, type Avatar,
   makeMob, updateMob, removeMob, triggerMobSwing, type Mob,
+  makeShrine, updateShrine, removeShrine, type Shrine,
+  makePet, updatePet, removePet, type Pet,
+  makeProjectile, updateProjectile, removeProjectile, type Proj,
 } from "./entities";
+import { spawnDamage, updateDamageNumbers } from "./fx";
 
 const statusEl = document.getElementById("status")!;
 const setStatus = (t: string) => { statusEl.textContent = t; };
 
 const avatars = new Map<string, Avatar>();
+const mercs = new Map<string, Avatar>();
 const mobs = new Map<string, Mob>();
+const shrines = new Map<string, Shrine>();
+const pets = new Map<string, Pet>();
+const projs = new Map<string, Proj>();
 
 // --- input: click-to-move (camera is locked; no orbit) --------------------------
 const raycaster = new THREE.Raycaster();
@@ -63,9 +71,40 @@ async function connect() {
       const mob = mobs.get(id); if (mob) removeMob(mob); mobs.delete(id);
     });
 
+    // mercs fight beside you — they wear gear like players, so reuse the avatar
+    $(room.state).mercs.onAdd((mc: any, id: string) => { mercs.set(id, makeAvatar(mc, false)); });
+    $(room.state).mercs.onRemove((_m: any, id: string) => {
+      const a = mercs.get(id); if (a) removeAvatar(a); mercs.delete(id);
+    });
+
+    // shrines carry the town: NPCs (vendor/gamble/…), portals, waypoints, chests
+    $(room.state).shrines.onAdd((s: any, id: string) => { shrines.set(id, makeShrine(s)); });
+    $(room.state).shrines.onRemove((_s: any, id: string) => {
+      const sh = shrines.get(id); if (sh) removeShrine(sh); shrines.delete(id);
+    });
+
+    $(room.state).pets.onAdd((p: any, id: string) => { pets.set(id, makePet(p)); });
+    $(room.state).pets.onRemove((_p: any, id: string) => {
+      const pet = pets.get(id); if (pet) removePet(pet); pets.delete(id);
+    });
+
+    $(room.state).projectiles.onAdd((p: any, id: string) => { projs.set(id, makeProjectile(p)); });
+    $(room.state).projectiles.onRemove((_p: any, id: string) => {
+      const pr = projs.get(id); if (pr) removeProjectile(pr); projs.delete(id);
+    });
+
     // combat: the same messages that drive the Phaser client's animations
-    room.onMessage("swing", (msg: any) => { const a = avatars.get(msg?.id); if (a) triggerSwing(a); });
+    room.onMessage("swing", (msg: any) => {
+      const a = avatars.get(msg?.id) ?? mercs.get(msg?.id); if (a) triggerSwing(a);
+    });
     room.onMessage("mswing", (msg: any) => { const m = mobs.get(msg?.id); if (m) triggerMobSwing(m); });
+    room.onMessage("hit", (msg: any) => {
+      if (typeof msg?.amount === "number" && msg.amount > 0) {
+        spawnDamage(msg.x, msg.y, Math.round(msg.amount), {
+          crit: !!msg.crit, resisted: !!msg.resisted, toPlayer: msg.t === "p" || msg.t === "c",
+        });
+      }
+    });
   } catch (err: any) {
     setStatus(`failed to join: ${err?.message ?? err}`);
     console.error("[voxel] join failed", err);
@@ -81,7 +120,12 @@ function animate() {
   last = now;
 
   avatars.forEach((a) => updateAvatar(a, dt));
+  mercs.forEach((a) => updateAvatar(a, dt));
   mobs.forEach((m) => updateMob(m, dt));
+  shrines.forEach((s) => updateShrine(s, dt));
+  pets.forEach((p) => updatePet(p));
+  projs.forEach((p) => updateProjectile(p));
+  updateDamageNumbers(dt);
 
   const me = room ? avatars.get(room.sessionId) : undefined;
   if (me) followCamera(me.rx, me.rz);

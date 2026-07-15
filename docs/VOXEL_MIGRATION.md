@@ -9,16 +9,19 @@
 ## Phases
 
 - [x] **P0 — Slice**: join real server, voxel terrain from `mapData`, class-colored avatars, click-to-move, torch. *(done)*
-- [~] **P1 — Camera + player + gear + animation** *(in progress)*
-  - [x] Lock camera to fixed angle, follow-only.
-  - [ ] Humanoid voxel player: head/torso/arms/legs, walk cycle inferred from movement.
-  - [ ] **Gear reflection**: helm/chest/weapon/boots appear from `*Base` fields; tinted by `gearTier` → rarity color (progression is visible on the body).
-  - [ ] **Combat animation**: hook `swing`/`mswing`/`hit` messages → weapon swing, hit flash.
-- [~] **P2 — Monsters**: voxel bodies per `kind`, sized/colored by kind, elite/champion glow, health bars, death removal, monster swings (`mswing`). *(started)*
-- [ ] **P3 — NPCs, mercs, pets, projectiles**: town NPCs as voxel figures + buildings/props; mercs (they carry gear like players); pets; projectiles (arrow/fireball) as voxel/particle.
+- [x] **P1 — Camera + player + gear + animation** *(done)*
+  - [x] Lock camera to fixed angle, follow-only (modest zoom kept).
+  - [x] Humanoid voxel player: head/torso/arms/legs, walk cycle inferred from movement, facing.
+  - [x] **Gear reflection**: helm/chest(pauldrons)/boots/offhand-shield + weapon (shape by base category: bow/staff/axe/blade) appear from `*Base` fields; tinted by `gearTier` → rarity color.
+  - [x] **Attack animation**: `swing` (players+mercs) / `mswing` (monsters) → weapon arc / lunge.
+- [x] **P2 — Monsters**: voxel bodies per `kind`, elite/champion glow + scale, glowing eyes, billboarded health bars, death removal. *(done)*
+- [x] **P3 — NPCs, mercs, pets, projectiles** *(done)*
+  - [x] Mercs reuse the player avatar (they carry gear); walk + swing.
+  - [x] Shrines = town NPCs (vendor/gamble/alchemist/mercnpc/…) as trade-tinted figures, portals/waypoints as glowing obelisks, chests/stash as boxes, all with a soft emissive pulse.
+  - [x] Pets (skeleton/wolf/golem/…) and projectiles (arrow + elemental orbs, emissive) with interpolation.
 - [ ] **P4 — Richer world**: tile-type/theme variety (grass/stone/sand/water), building height, decor, fog-of-war reveal, per-theme lighting & weather.
 - [ ] **P5 — UI overlay**: port the HUD + panels (inventory/character/skills/vendor/forge/quest) to a DOM/HTML overlay above the canvas.
-- [ ] **P6 — Effects & polish**: particles, damage numbers, screen shake, ability telegraphs, per-theme atmosphere. (Audio already exists in the Phaser client — reuse/port.)
+- [~] **P6 — Effects & polish**: [x] floating damage numbers (`hit` message: crit/resisted/incoming coloring). Remaining: hit flash, particles, screen shake, ability telegraphs, per-theme atmosphere, audio port.
 - [ ] **P7 — Cutover**: voxel becomes the default entry; retire Phaser world rendering.
 
 ## Notes / signals (from the real code)

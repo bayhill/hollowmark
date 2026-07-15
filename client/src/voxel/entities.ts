@@ -5,7 +5,7 @@ import { RARITY_ORDER, RARITY_COLORS, type Rarity } from "@hollowmark/common";
 import { scene, camera } from "./scene";
 
 const CLASS_COLORS: Record<string, number> = {
-  barbarian: 0xc0392b, rogue: 0x27ae60, sorcerer: 0x2f80c9,
+  barbarian: 0xc0392b, rogue: 0x27ae60, sorcerer: 0x2f80c9, mage: 0x2f80c9,
   paladin: 0xc9a227, necromancer: 0x6a8f7a, druid: 0x9a6a3a,
 };
 
@@ -275,3 +275,122 @@ export function updateMob(mob: Mob, dt: number) {
 }
 
 export function removeMob(mob: Mob) { scene.remove(mob.group); disposeObject(mob.group); }
+
+// ============================================================ SHRINES / NPCS
+
+const SHRINE_ACCENT: Record<string, number> = {
+  gamble: 0xd8b13a, riftportal: 0xb060ff, riftexit: 0x60d0a0, cowportal: 0xd83a3a,
+  waypoint: 0x6a8cff, caravan: 0xc08a4a, alchemist: 0x7fdc9f, vendor: 0xd8a868,
+  mercnpc: 0xc03848, storyteller: 0xc9a44a, barkeep: 0xe0a850, encounter: 0x8a7ab0,
+  areaportal: 0xc8a860, stash: 0x6a5a8f, chest: 0x8f6a34, healing: 0x50d0a0,
+};
+const NPC_KINDS = new Set(["vendor", "gamble", "alchemist", "mercnpc", "caravan", "storyteller", "barkeep"]);
+const PORTAL_KINDS = new Set(["riftportal", "riftexit", "cowportal", "areaportal"]);
+
+export interface Shrine { group: THREE.Group; schema: any; kind: string; glowMat?: THREE.MeshStandardMaterial; t: number; }
+
+export function makeShrine(schema: any): Shrine {
+  const kind = String(schema.kind);
+  const accent = SHRINE_ACCENT[kind] ?? 0x8a8a96;
+  const group = new THREE.Group();
+  group.position.set(schema.x, 0, schema.y);
+  let glowMat: THREE.MeshStandardMaterial | undefined;
+
+  if (NPC_KINDS.has(kind)) {
+    const robe = new THREE.Mesh(new THREE.BoxGeometry(15, 24, 11), mat(accent, accent, 0.28));
+    robe.position.y = 15; robe.castShadow = true;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), mat(0xe8c8a0));
+    head.position.y = 32; head.castShadow = true;
+    group.add(robe, head);
+    glowMat = robe.material as THREE.MeshStandardMaterial;
+  } else if (kind === "chest" || kind === "stash") {
+    const wood = kind === "stash" ? 0x6a5a8f : 0x7a5a2c;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(22, 14, 16), mat(wood));
+    body.position.y = 7; body.castShadow = true;
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(23, 6, 17), mat(wood, accent, 0.2));
+    lid.position.y = 16;
+    group.add(body, lid);
+  } else if (PORTAL_KINDS.has(kind) || kind === "waypoint") {
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(14, 48, 14), mat(0x1a1a24, accent, 0.7));
+    pillar.position.y = 24; pillar.castShadow = true;
+    group.add(pillar);
+    glowMat = pillar.material as THREE.MeshStandardMaterial;
+  } else {
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(10, 20, 10), mat(0x2a2a34, accent, 0.6));
+    marker.position.y = 10; group.add(marker);
+    glowMat = marker.material as THREE.MeshStandardMaterial;
+  }
+  scene.add(group);
+  return { group, schema, kind, glowMat, t: Math.random() * 6 };
+}
+
+export function updateShrine(sh: Shrine, dt: number) {
+  sh.t += dt;
+  if (sh.glowMat) sh.glowMat.emissiveIntensity = 0.4 + Math.sin(sh.t * 2.2) * 0.2;
+}
+export function removeShrine(sh: Shrine) { scene.remove(sh.group); disposeObject(sh.group); }
+
+// ============================================================ PETS
+
+const PET_STYLE: Record<string, { color: number; h: number; w: number }> = {
+  skeleton: { color: 0xd8d2c0, h: 22, w: 12 },
+  wolf: { color: 0x6a5a4a, h: 15, w: 22 },
+  golem: { color: 0x5a5a66, h: 30, w: 22 },
+  spirit: { color: 0x8ad0e0, h: 20, w: 12 },
+  raven: { color: 0x2a2a34, h: 10, w: 14 },
+};
+
+export interface Pet { group: THREE.Group; schema: any; rx: number; rz: number; }
+
+export function makePet(schema: any): Pet {
+  const st = PET_STYLE[String(schema.kind)] ?? { color: 0x9a9aa6, h: 18, w: 14 };
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(st.w, st.h, st.w * 0.8), mat(st.color));
+  body.position.y = st.h / 2; body.castShadow = true; group.add(body);
+  group.position.set(schema.x, 0, schema.y);
+  scene.add(group);
+  return { group, schema, rx: schema.x, rz: schema.y };
+}
+export function updatePet(p: Pet) {
+  p.rx += (p.schema.x - p.rx) * 0.25; p.rz += (p.schema.y - p.rz) * 0.25;
+  p.group.position.set(p.rx, 0, p.rz);
+}
+export function removePet(p: Pet) { scene.remove(p.group); disposeObject(p.group); }
+
+// ============================================================ PROJECTILES
+
+const PROJ_STYLE: Record<string, { color: number; emissive: number; size: number }> = {
+  fireball: { color: 0xff8030, emissive: 0xff5010, size: 10 },
+  frostbolt: { color: 0x80c0ff, emissive: 0x3080ff, size: 8 },
+  ice: { color: 0x80c0ff, emissive: 0x3080ff, size: 8 },
+  lightning: { color: 0xd8f0ff, emissive: 0x90b0ff, size: 7 },
+  poison: { color: 0x9ad060, emissive: 0x60a020, size: 8 },
+  bolt: { color: 0xffe090, emissive: 0xffc040, size: 7 },
+};
+
+export interface Proj { group: THREE.Group; schema: any; rx: number; rz: number; arrow: boolean; }
+
+export function makeProjectile(schema: any): Proj {
+  const kind = String(schema.kind);
+  const group = new THREE.Group();
+  const arrow = kind === "arrow";
+  if (arrow) {
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 18), mat(0x8a6a3a, 0x201810, 0.2));
+    group.add(shaft);
+  } else {
+    const st = PROJ_STYLE[kind] ?? { color: 0xffffff, emissive: 0xaaaaaa, size: 8 };
+    const orb = new THREE.Mesh(new THREE.BoxGeometry(st.size, st.size, st.size), mat(st.color, st.emissive, 1.3));
+    group.add(orb);
+  }
+  group.position.set(schema.x, 18, schema.y);
+  scene.add(group);
+  return { group, schema, rx: schema.x, rz: schema.y, arrow };
+}
+export function updateProjectile(pr: Proj) {
+  const dx = pr.schema.x - pr.rx, dz = pr.schema.y - pr.rz;
+  pr.rx += dx * 0.5; pr.rz += dz * 0.5;
+  pr.group.position.set(pr.rx, 18, pr.rz);
+  if (pr.arrow) { if (Math.hypot(dx, dz) > 0.1) pr.group.rotation.y = Math.atan2(dx, dz); }
+  else pr.group.rotation.y += 0.35;
+}
+export function removeProjectile(pr: Proj) { scene.remove(pr.group); disposeObject(pr.group); }
