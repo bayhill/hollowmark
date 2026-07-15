@@ -19,6 +19,7 @@ import {
   makeLoot, updateLoot, removeLoot, type Loot,
 } from "./entities";
 import { spawnDamage, updateDamageNumbers } from "./fx";
+import { updateHud } from "./hud";
 
 const statusEl = document.getElementById("status")!;
 const setStatus = (t: string) => { statusEl.textContent = t; };
@@ -188,6 +189,7 @@ function animate() {
   const me = room ? avatars.get(room.sessionId) : undefined;
   if (me) {
     followCamera(me.rx, me.rz);
+    updateHud(me.schema);
     // hold right button to keep attacking toward the cursor
     if (rightHeld && now - lastAttack > 240) { attackAt(); lastAttack = now; }
     // walk-then-act: fire the pending pickup / interaction once in range
