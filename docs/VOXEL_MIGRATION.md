@@ -19,7 +19,7 @@
   - [x] Mercs reuse the player avatar (they carry gear); walk + swing.
   - [x] Shrines = town NPCs (vendor/gamble/alchemist/mercnpc/…) as trade-tinted figures, portals/waypoints as glowing obelisks, chests/stash as boxes, all with a soft emissive pulse.
   - [x] Pets (skeleton/wolf/golem/…) and projectiles (arrow + elemental orbs, emissive) with interpolation.
-- [ ] **P4 — Richer world**: tile-type/theme variety (grass/stone/sand/water), building height, decor, fog-of-war reveal, per-theme lighting & weather.
+- [~] **P4 — Richer world**: [x] per-theme terrain colors (floor/wall from `FLOOR_THEMES` via `visualThemeFor`, rebuilt each floor). Remaining: water/decor tiles, building height variety, fog-of-war reveal, per-theme fog/lighting & weather.
 - [ ] **P5 — UI overlay**: port the HUD + panels (inventory/character/skills/vendor/forge/quest) to a DOM/HTML overlay above the canvas.
 - [~] **P6 — Effects & polish**: [x] floating damage numbers (`hit` message: crit/resisted/incoming coloring). Remaining: hit flash, particles, screen shake, ability telegraphs, per-theme atmosphere, audio port.
 - [ ] **P7 — Cutover**: voxel becomes the default entry; retire Phaser world rendering.

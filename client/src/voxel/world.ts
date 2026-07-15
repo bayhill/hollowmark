@@ -42,7 +42,9 @@ function instanced(
   return mesh;
 }
 
-export function buildTerrain(map: GameMap): { floors: number; walls: number } {
+export function buildTerrain(
+  map: GameMap, floorColor = 0x2b3040, wallColor = 0x4a4560
+): { floors: number; walls: number } {
   if (terrain) { scene.remove(terrain); disposeGroup(terrain); }
   terrain = new THREE.Group();
   const floors: Array<[number, number]> = [];
@@ -55,8 +57,8 @@ export function buildTerrain(map: GameMap): { floors: number; walls: number } {
       else if (c === ".") floors.push([tx, ty]);
     }
   }
-  terrain.add(instanced(floors, 8, 0x2b3040, -4, false)); // floor slabs, top at y=0
-  terrain.add(instanced(walls, 54, 0x4a4560, 27, true)); // wall blocks, base at y=0
+  terrain.add(instanced(floors, 8, floorColor, -4, false)); // floor slabs, top at y=0
+  terrain.add(instanced(walls, 54, wallColor, 27, true)); // wall blocks, base at y=0
   scene.add(terrain);
   return { floors: floors.length, walls: walls.length };
 }

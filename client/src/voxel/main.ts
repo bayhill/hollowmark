@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
-import { makeMap } from "@hollowmark/common";
+import { makeMap, visualThemeFor, FLOOR_THEMES } from "@hollowmark/common";
 import { renderer, scene, camera, followCamera, zoom } from "./scene";
 import { buildTerrain } from "./world";
 import {
@@ -55,8 +55,10 @@ async function connect() {
 
     $(room.state).listen("mapData", (v: string) => {
       if (!v) return;
-      const stats = buildTerrain(makeMap(v.split("\n").filter((r) => r.length > 0)));
-      setStatus(`Hollowmark · ${stats.floors + stats.walls} voxels · ${avatars.size} heroes`);
+      const st: any = room!.state;
+      const theme = FLOOR_THEMES[visualThemeFor(st.act ?? 1, st.floor ?? 1)] ?? FLOOR_THEMES[0];
+      const stats = buildTerrain(makeMap(v.split("\n").filter((r) => r.length > 0)), theme.floorA, theme.wallTop);
+      setStatus(`Hollowmark · ${theme.id} · ${stats.floors + stats.walls} voxels`);
     });
 
     $(room.state).players.onAdd((player: any, key: string) => {
