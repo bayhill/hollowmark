@@ -9,10 +9,8 @@
   },
   "dependencies": {
     "@hollowmark/common": "*",
-    "@types/three": "^0.169.0",
     "colyseus.js": "^0.16.0",
-    "phaser": "^3.85.0",
-    "three": "^0.169.0"
+    "phaser": "^3.85.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
