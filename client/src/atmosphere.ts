@@ -27,12 +27,11 @@ export class Atmosphere {
 
   setup() {
     const cam = this.scene.cameras.main;
-    // post-processing chain (WebGL only) — guard for safety
+    // A whisper of a vignette to frame the hero — NO full-screen bloom: it blurs
+    // the crisp procedural art and floating text into mush. Glow belongs on
+    // specific bright objects (loot beams, portals), not the whole camera.
     if (cam.postFX) {
-      // bloom makes bright things (torch, embers, loot beams, spells) glow
-      cam.postFX.addBloom(0xffffff, 1, 1, 1.1, 0.75, 5);
-      // vignette darkens the screen edges, pulling the eye to the hero
-      cam.postFX.addVignette(0.5, 0.5, 0.82, 0.42);
+      cam.postFX.addVignette(0.5, 0.5, 0.92, 0.22);
     }
 
     const w = this.scene.scale.width;
@@ -52,8 +51,9 @@ export class Atmosphere {
     const theme = FLOOR_THEMES[themeIdx] ?? FLOOR_THEMES[0];
     const accent = theme.accent;
 
-    // zone temperature: a pastel of the accent, MULTIPLY'd faintly over everything
-    this.wash?.setFillStyle(pastel(accent, 0.58), 1).setAlpha(0.22);
+    // zone temperature: a pastel of the accent, MULTIPLY'd *very* faintly — just a
+    // whisper of hue, not the muddy green tarp the first pass laid over everything
+    this.wash?.setFillStyle(pastel(accent, 0.72), 1).setAlpha(0.1);
 
     // drifting ambient motes tinted to the zone — rebuilt per floor
     this.motes?.destroy();
@@ -66,9 +66,9 @@ export class Atmosphere {
         lifespan: 6000,
         speedX: { min: -7, max: 7 },
         speedY: { min: -16, max: -3 }, // a slow upward drift, like embers
-        scale: { start: 0.05, end: 0.015 },
-        alpha: { start: 0.38, end: 0 }, // a mote glimmers, then fades
-        frequency: 90,
+        scale: { start: 0.04, end: 0.012 },
+        alpha: { start: 0.26, end: 0 }, // a mote glimmers, then fades
+        frequency: 150,
         quantity: 1,
         tint: brighten(accent, 0.35),
         blendMode: Phaser.BlendModes.ADD,
