@@ -20,7 +20,7 @@
   - [x] Shrines = town NPCs (vendor/gamble/alchemist/mercnpc/…) as trade-tinted figures, portals/waypoints as glowing obelisks, chests/stash as boxes, all with a soft emissive pulse.
   - [x] Pets (skeleton/wolf/golem/…) and projectiles (arrow + elemental orbs, emissive) with interpolation.
 - [~] **P4 — Richer world**: [x] per-theme terrain colors (floor/wall from `FLOOR_THEMES` via `visualThemeFor`, rebuilt each floor). Remaining: water/decor tiles, building height variety, fog-of-war reveal, per-theme fog/lighting & weather.
-- [~] **P5 — UI overlay** *(HUD done)*: [x] bottom HUD — health/mana orbs, level, gold, XP bar, potion counts, hotbar (Q/E/F + R/W). Remaining: full panels (inventory/character/skills/vendor/forge/quest) as DOM overlays, minimap.
+- [~] **P5 — UI overlay** *(HUD + inventory done)*: [x] bottom HUD — health/mana orbs, level, gold, XP bar, potion counts, hotbar (Q/E/F + R/W). [x] Inventory panel (I/B) — equip/unequip/identify/drop/sort via `loadout` message, rarity-colored, equipping shows gear on the voxel hero. Remaining panels: character sheet, skill tree, vendor/forge, quest log; minimap.
 - [x] **Fight input**: right-click (hold) attack toward cursor, Q/E/F skills, R/W potions, T portal, G ping, click-to-loot & click NPC/portal (walk-then-act). Same messages as the Phaser client.
 - [~] **P6 — Effects & polish**: [x] floating damage numbers (crit/resisted/incoming), [x] hit-flash squash on struck entities, [x] loot beams. Remaining: particles, screen shake, ability telegraphs, per-theme atmosphere, audio port.
 - [ ] **P7 — Cutover**: voxel becomes the default entry; retire Phaser world rendering.

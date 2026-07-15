@@ -20,6 +20,7 @@ import {
 } from "./entities";
 import { spawnDamage, updateDamageNumbers } from "./fx";
 import { updateHud } from "./hud";
+import { initPanels, setLoadout, toggleInventory } from "./panels";
 
 const statusEl = document.getElementById("status")!;
 const setStatus = (t: string) => { statusEl.textContent = t; };
@@ -104,6 +105,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "w") { room.send("drinkmana"); }
   else if (k === "t") { room.send("townportal"); }
   else if (k === "g") { const g = groundPoint(); if (g) room.send("ping", { x: g.x, y: g.z }); }
+  else if (k === "i" || k === "b") { toggleInventory(); }
 });
 
 // --- server connection ----------------------------------------------------------
@@ -112,6 +114,8 @@ async function connect() {
     const client = new Client(`ws://${location.hostname}:2567`);
     room = await client.joinOrCreate("dungeon", { cls: "barbarian", name: "VoxelProto", difficulty: 1 });
     setStatus("joined · building the world…");
+    initPanels((t, p) => room?.send(t, p));
+    room.onMessage("loadout", (msg: any) => setLoadout(msg));
     const $ = getStateCallbacks(room);
 
     $(room.state).listen("mapData", (v: string) => {
