@@ -1,9 +1,9 @@
 // Hollowmark — voxel 3D client (migration in progress; see docs/VOXEL_MIGRATION.md).
 //
-// A renderer over the REAL Colyseus server: joins the "dungeon" room as a guest,
-// reads the same `mapData`/`players`/`monsters` state and `swing`/`mswing` combat
-// messages the Phaser client reads, and draws a voxel world with a locked D3 camera.
-// The Phaser client (index.html) is untouched and runs in parallel.
+// A renderer + input layer over the REAL Colyseus server. Reads the same state
+// (mapData/players/monsters/mercs/shrines/pets/projectiles/loot) and combat
+// messages (swing/mswing/hit) the Phaser client uses, and sends the same input
+// messages (move/attack/skill/drink/pickup/touchshrine). Locked D3 camera.
 
 import * as THREE from "three";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
@@ -16,6 +16,7 @@ import {
   makeShrine, updateShrine, removeShrine, type Shrine,
   makePet, updatePet, removePet, type Pet,
   makeProjectile, updateProjectile, removeProjectile, type Proj,
+  makeLoot, updateLoot, removeLoot, type Loot,
 } from "./entities";
 import { spawnDamage, updateDamageNumbers } from "./fx";
 
@@ -28,22 +29,81 @@ const mobs = new Map<string, Mob>();
 const shrines = new Map<string, Shrine>();
 const pets = new Map<string, Pet>();
 const projs = new Map<string, Proj>();
+const loots = new Map<string, Loot>();
 
-// --- input: click-to-move (camera is locked; no orbit) --------------------------
-const raycaster = new THREE.Raycaster();
-const ndc = new THREE.Vector2();
-const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let room: Room | null = null;
 
-renderer.domElement.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !room) return;
+// a click on loot / an NPC walks there first, then acts once in range
+let pending: { type: "pickup" | "touchshrine"; id: string; x: number; z: number } | null = null;
+
+// --- picking / input ------------------------------------------------------------
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+let rightHeld = false;
+let lastAttack = 0;
+
+function setNdc(e: { clientX: number; clientY: number }) {
   ndc.x = (e.clientX / window.innerWidth) * 2 - 1;
   ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+}
+
+function groundPoint(): { x: number; z: number } | null {
   raycaster.setFromCamera(ndc, camera);
   const hit = new THREE.Vector3();
-  if (raycaster.ray.intersectPlane(ground, hit)) room.send("move", { x: hit.x, y: hit.z });
+  return raycaster.ray.intersectPlane(groundPlane, hit) ? { x: hit.x, z: hit.z } : null;
+}
+
+function pickInteractable(): { type: "loot" | "shrine"; id: string; x: number; z: number } | null {
+  raycaster.setFromCamera(ndc, camera);
+  const groups: THREE.Object3D[] = [];
+  loots.forEach((l) => groups.push(l.group));
+  shrines.forEach((s) => groups.push(s.group));
+  const hits = raycaster.intersectObjects(groups, true);
+  for (const h of hits) {
+    let o: THREE.Object3D | null = h.object;
+    while (o && !(o.userData && o.userData.pick)) o = o.parent;
+    if (o && o.userData.pick) return o.userData.pick;
+  }
+  return null;
+}
+
+function attackAt() {
+  const g = groundPoint();
+  if (g && room) room.send("attack", { x: g.x, y: g.z });
+}
+
+renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+renderer.domElement.addEventListener("pointermove", (e) => setNdc(e));
+
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (!room) return;
+  setNdc(e);
+  if (e.button === 2) { rightHeld = true; attackAt(); lastAttack = performance.now(); return; } // right = fight
+  if (e.button !== 0) return;
+  const hit = pickInteractable();
+  if (hit) {
+    pending = { type: hit.type === "loot" ? "pickup" : "touchshrine", id: hit.id, x: hit.x, z: hit.z };
+    room.send("move", { x: hit.x, y: hit.z });
+    return;
+  }
+  const g = groundPoint();
+  if (g) { pending = null; room.send("move", { x: g.x, y: g.z }); }
 });
+window.addEventListener("pointerup", (e) => { if (e.button === 2) rightHeld = false; });
 renderer.domElement.addEventListener("wheel", (e) => { e.preventDefault(); zoom(e.deltaY); }, { passive: false });
+
+window.addEventListener("keydown", (e) => {
+  if (!room) return;
+  const k = e.key.toLowerCase();
+  if (k === "q" || k === "e" || k === "f") {
+    const g = groundPoint();
+    if (g) room.send("skill", { key: e.key.toUpperCase(), x: g.x, y: g.z });
+  } else if (k === "r") { room.send("drink"); }
+  else if (k === "w") { room.send("drinkmana"); }
+  else if (k === "t") { room.send("townportal"); }
+  else if (k === "g") { const g = groundPoint(); if (g) room.send("ping", { x: g.x, y: g.z }); }
+});
 
 // --- server connection ----------------------------------------------------------
 async function connect() {
@@ -61,44 +121,37 @@ async function connect() {
       setStatus(`Hollowmark · ${theme.id} · ${stats.floors + stats.walls} voxels`);
     });
 
-    $(room.state).players.onAdd((player: any, key: string) => {
-      avatars.set(key, makeAvatar(player, key === room!.sessionId));
-    });
-    $(room.state).players.onRemove((_p: any, key: string) => {
-      const a = avatars.get(key); if (a) removeAvatar(a); avatars.delete(key);
-    });
+    $(room.state).players.onAdd((p: any, key: string) => { avatars.set(key, makeAvatar(p, key === room!.sessionId)); });
+    $(room.state).players.onRemove((_p: any, key: string) => { const a = avatars.get(key); if (a) removeAvatar(a); avatars.delete(key); });
+
+    $(room.state).mercs.onAdd((mc: any, id: string) => { mercs.set(id, makeAvatar(mc, false)); });
+    $(room.state).mercs.onRemove((_m: any, id: string) => { const a = mercs.get(id); if (a) removeAvatar(a); mercs.delete(id); });
 
     $(room.state).monsters.onAdd((m: any, id: string) => { mobs.set(id, makeMob(m)); });
-    $(room.state).monsters.onRemove((_m: any, id: string) => {
-      const mob = mobs.get(id); if (mob) removeMob(mob); mobs.delete(id);
-    });
+    $(room.state).monsters.onRemove((_m: any, id: string) => { const mob = mobs.get(id); if (mob) removeMob(mob); mobs.delete(id); });
 
-    // mercs fight beside you — they wear gear like players, so reuse the avatar
-    $(room.state).mercs.onAdd((mc: any, id: string) => { mercs.set(id, makeAvatar(mc, false)); });
-    $(room.state).mercs.onRemove((_m: any, id: string) => {
-      const a = mercs.get(id); if (a) removeAvatar(a); mercs.delete(id);
+    $(room.state).shrines.onAdd((s: any, id: string) => {
+      const sh = makeShrine(s);
+      sh.group.userData.pick = { type: "shrine", id, x: s.x, z: s.y };
+      shrines.set(id, sh);
     });
-
-    // shrines carry the town: NPCs (vendor/gamble/…), portals, waypoints, chests
-    $(room.state).shrines.onAdd((s: any, id: string) => { shrines.set(id, makeShrine(s)); });
-    $(room.state).shrines.onRemove((_s: any, id: string) => {
-      const sh = shrines.get(id); if (sh) removeShrine(sh); shrines.delete(id);
-    });
+    $(room.state).shrines.onRemove((_s: any, id: string) => { const sh = shrines.get(id); if (sh) removeShrine(sh); shrines.delete(id); });
 
     $(room.state).pets.onAdd((p: any, id: string) => { pets.set(id, makePet(p)); });
-    $(room.state).pets.onRemove((_p: any, id: string) => {
-      const pet = pets.get(id); if (pet) removePet(pet); pets.delete(id);
-    });
+    $(room.state).pets.onRemove((_p: any, id: string) => { const pet = pets.get(id); if (pet) removePet(pet); pets.delete(id); });
 
     $(room.state).projectiles.onAdd((p: any, id: string) => { projs.set(id, makeProjectile(p)); });
-    $(room.state).projectiles.onRemove((_p: any, id: string) => {
-      const pr = projs.get(id); if (pr) removeProjectile(pr); projs.delete(id);
-    });
+    $(room.state).projectiles.onRemove((_p: any, id: string) => { const pr = projs.get(id); if (pr) removeProjectile(pr); projs.delete(id); });
 
-    // combat: the same messages that drive the Phaser client's animations
-    room.onMessage("swing", (msg: any) => {
-      const a = avatars.get(msg?.id) ?? mercs.get(msg?.id); if (a) triggerSwing(a);
+    $(room.state).loot.onAdd((g: any, id: string) => {
+      const l = makeLoot(g);
+      l.group.userData.pick = { type: "loot", id, x: g.x, z: g.y };
+      loots.set(id, l);
     });
+    $(room.state).loot.onRemove((_g: any, id: string) => { const l = loots.get(id); if (l) removeLoot(l); loots.delete(id); });
+
+    // combat feedback: swings + hit flashes + damage numbers
+    room.onMessage("swing", (msg: any) => { const a = avatars.get(msg?.id) ?? mercs.get(msg?.id); if (a) triggerSwing(a); });
     room.onMessage("mswing", (msg: any) => { const m = mobs.get(msg?.id); if (m) triggerMobSwing(m); });
     room.onMessage("hit", (msg: any) => {
       if (typeof msg?.amount === "number" && msg.amount > 0) {
@@ -106,6 +159,8 @@ async function connect() {
           crit: !!msg.crit, resisted: !!msg.resisted, toPlayer: msg.t === "p" || msg.t === "c",
         });
       }
+      const target = msg?.t === "m" ? mobs.get(msg.id) : msg?.t === "c" ? mercs.get(msg.id) : avatars.get(msg?.id);
+      if (target) target.flashT = 0.16;
     });
   } catch (err: any) {
     setStatus(`failed to join: ${err?.message ?? err}`);
@@ -127,10 +182,23 @@ function animate() {
   shrines.forEach((s) => updateShrine(s, dt));
   pets.forEach((p) => updatePet(p));
   projs.forEach((p) => updateProjectile(p));
+  loots.forEach((l) => updateLoot(l, dt));
   updateDamageNumbers(dt);
 
   const me = room ? avatars.get(room.sessionId) : undefined;
-  if (me) followCamera(me.rx, me.rz);
+  if (me) {
+    followCamera(me.rx, me.rz);
+    // hold right button to keep attacking toward the cursor
+    if (rightHeld && now - lastAttack > 240) { attackAt(); lastAttack = now; }
+    // walk-then-act: fire the pending pickup / interaction once in range
+    if (pending) {
+      const range = pending.type === "pickup" ? 44 : 42;
+      if (Math.hypot(me.schema.x - pending.x, me.schema.y - pending.z) < range) {
+        room!.send(pending.type, { id: pending.id });
+        pending = null;
+      }
+    }
+  }
 
   renderer.render(scene, camera);
 }

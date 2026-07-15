@@ -48,6 +48,7 @@ export interface Avatar {
   facing: number;
   step: number;
   swingT: number;
+  flashT: number;
   gearSig: string;
   armR: THREE.Group; armL: THREE.Group; legR: THREE.Group; legL: THREE.Group;
   gearMeshes: THREE.Object3D[];
@@ -79,7 +80,7 @@ export function makeAvatar(schema: any, local: boolean): Avatar {
   const legL = limb(6, 13, 6, 0x30303c); legL.position.set(-4, 13, 0); group.add(legL);
 
   const av: Avatar = {
-    group, schema, rx: schema.x, rz: schema.y, facing: 0, step: 0, swingT: 0,
+    group, schema, rx: schema.x, rz: schema.y, facing: 0, step: 0, swingT: 0, flashT: 0,
     gearSig: "", armR, armL, legR, legL, gearMeshes: [], local,
   };
   buildGear(av);
@@ -186,6 +187,15 @@ export function updateAvatar(av: Avatar, dt: number) {
   } else {
     av.armR.rotation.x = -sw * 0.8;
   }
+
+  // hit flash: a quick squash when struck
+  if (av.flashT > 0) {
+    av.flashT = Math.max(0, av.flashT - dt);
+    const q = av.flashT / 0.16;
+    av.group.scale.set(1 + q * 0.18, 1 - q * 0.18, 1 + q * 0.18);
+  } else if (av.group.scale.y !== 1) {
+    av.group.scale.set(1, 1, 1);
+  }
 }
 
 export function removeAvatar(av: Avatar) { scene.remove(av.group); disposeObject(av.group); }
@@ -214,6 +224,7 @@ export interface Mob {
   hpFg: THREE.Mesh;
   bars: THREE.Group;
   swingT: number;
+  flashT: number;
   maxHp: number;
 }
 
@@ -253,7 +264,7 @@ export function makeMob(schema: any): Mob {
   group.add(bars);
 
   scene.add(group);
-  return { group, schema, rx: schema.x, rz: schema.y, hpFg, bars, swingT: 0, maxHp: schema.maxHp || 1 };
+  return { group, schema, rx: schema.x, rz: schema.y, hpFg, bars, swingT: 0, flashT: 0, maxHp: schema.maxHp || 1 };
 }
 
 export function triggerMobSwing(mob: Mob) { mob.swingT = 0.28; }
@@ -272,6 +283,14 @@ export function updateMob(mob: Mob, dt: number) {
   mob.hpFg.position.x = -(1 - frac) * 12; // shrink from the right
   (mob.hpFg.material as THREE.MeshBasicMaterial).color.setHex(frac > 0.5 ? 0x50c050 : frac > 0.25 ? 0xd0b040 : 0xd04040);
   mob.bars.quaternion.copy(camera.quaternion); // face the camera
+
+  if (mob.flashT > 0) {
+    mob.flashT = Math.max(0, mob.flashT - dt);
+    const q = mob.flashT / 0.16;
+    mob.group.scale.set(1 + q * 0.2, 1 - q * 0.2, 1 + q * 0.2);
+  } else if (mob.group.scale.y !== 1) {
+    mob.group.scale.set(1, 1, 1);
+  }
 }
 
 export function removeMob(mob: Mob) { scene.remove(mob.group); disposeObject(mob.group); }
@@ -394,3 +413,39 @@ export function updateProjectile(pr: Proj) {
   else pr.group.rotation.y += 0.35;
 }
 export function removeProjectile(pr: Proj) { scene.remove(pr.group); disposeObject(pr.group); }
+
+// ============================================================ GROUND LOOT
+
+export interface Loot { group: THREE.Group; schema: any; orb?: THREE.Object3D; t: number; }
+
+export function makeLoot(schema: any): Loot {
+  const kind = String(schema.kind); // "item" | "potion" | "gold"
+  const color = RARITY_COLORS[String(schema.rarity) as Rarity] ?? 0xd0d0d0;
+  const group = new THREE.Group();
+  group.position.set(schema.x, 0, schema.y);
+  let orb: THREE.Object3D | undefined;
+
+  if (kind === "gold") {
+    const coins = new THREE.Mesh(new THREE.BoxGeometry(12, 5, 12), mat(0xd8b13a, 0xd8b13a, 0.5));
+    coins.position.y = 3; coins.castShadow = true; group.add(coins);
+  } else if (kind === "potion") {
+    const flask = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 6), mat(0xc03838, 0xc03838, 0.5));
+    flask.position.y = 6; flask.castShadow = true; group.add(flask); orb = flask;
+  } else {
+    // a rarity-colored loot beam + a slowly bobbing item mote (Diablo's "a beam lit up")
+    const beamMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 130, 6, 1, true), beamMat);
+    beam.position.y = 65;
+    const mote = new THREE.Mesh(new THREE.BoxGeometry(11, 11, 11), mat(0x1a1a22, color, 0.9));
+    mote.position.y = 16; mote.castShadow = true;
+    group.add(beam, mote); orb = mote;
+  }
+  scene.add(group);
+  return { group, schema, orb, t: Math.random() * 6 };
+}
+
+export function updateLoot(l: Loot, dt: number) {
+  l.t += dt;
+  if (l.orb) { l.orb.rotation.y += dt * 1.4; l.orb.position.y = 16 + Math.sin(l.t * 2.2) * 2.5; }
+}
+export function removeLoot(l: Loot) { scene.remove(l.group); disposeObject(l.group); }
