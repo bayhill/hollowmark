@@ -76,4 +76,32 @@ console.log(`champion pack chance (flat): ${pct(CHAMPION_CHANCE)} per camp`);
 console.log("\n═══ observations to eyeball ═══");
 console.log("- if 'kills per unique+' at MF0 is > ~800, the base chase may be too dry for casual play");
 console.log("- if the Hell danger offset makes hpMult balloon past ~25×, low-level trash on Hell f1 may be spongey");
-console.log("- pack size caps at 5 and elite% at 40% — check that deep floors don't feel identical to mid");
+console.log("- pack size caps at 12 and elite% at 40% by danger ~14 — check that deep floors don't feel identical to mid");
+
+console.log("\n═══ DENSITY PLATEAU: where combat variety stops scaling ═══");
+// find the danger at which pack size and elite% hit their caps
+let packCapAt = 0, eliteCapAt = 0;
+for (let d = 1; d <= 84; d++) {
+  if (!packCapAt && campPackSize(d) >= 12) packCapAt = d;
+  if (!eliteCapAt && eliteChanceFor(d) >= 0.4 - 1e-9) eliteCapAt = d;
+}
+console.log(`pack size caps at 12 by danger ${packCapAt} (Act ${Math.ceil(packCapAt/ACT_FLOORS)}); elite% caps at 40% by danger ${eliteCapAt}`);
+console.log(`champion-pack chance is FLAT at ${pct(CHAMPION_CHANCE)} for all 84 danger levels`);
+console.log(`→ from danger ${Math.max(packCapAt,eliteCapAt)} to 84 (the deepest ${Math.round((84-Math.max(packCapAt,eliteCapAt))/84*100)}% of the game) combat changes ONLY by HP/damage numbers`);
+console.log(`  (behavioral champion affixes now add mid-fight variety, but pack SIZE / elite & champion DENSITY stay flat)`);
+
+console.log("\n═══ PER-FLOOR LOOT: the fountain (denser packs since pack cap 5 → 12) ═══");
+const CAMPS = 11; // a typical floor's camp count (from live logs)
+for (const [label, packCap] of [["old cap (5)", 5], ["current cap (12)", 12]] as Array<[string, number]>) {
+  const deepPack = Math.min(packCap, campPackSize(84));
+  const mobs = CAMPS * deepPack;
+  const gearPerFloor = mobs * DROP_CHANCE;
+  const uniquePlusPerFloor = gearPerFloor * 0.0594; // MF0 unique+ share of a gear drop
+  console.log(`${label.padEnd(16)} ~${mobs} trash/floor → ~${gearPerFloor.toFixed(1)} gear, ~${uniquePlusPerFloor.toFixed(2)} unique+/floor (MF0), +gold/runes/charms`);
+}
+console.log(`→ the pack-density bump (5→12) roughly ${(12/5).toFixed(1)}×'d per-floor loot; DROP_CHANCE (${pct(DROP_CHANCE)}/kill) was left untouched on purpose`);
+
+console.log("\n═══ HP SPONGE CHECK: monster HP is unbounded, player level is not ═══");
+for (const d of [28, 42, 56, 70, 84]) {
+  console.log(`danger ${d}: zombie ${Math.round(baseHp*floorHpMult(d))} hp (${floorHpMult(d).toFixed(1)}×), monster dmg ${floorDmgMult(d).toFixed(1)}× — vs a level-cap hero whose base HP/DPS growth has stopped (only paragon trickles)`);
+}

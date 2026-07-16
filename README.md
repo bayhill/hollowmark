@@ -41,7 +41,7 @@ Equipment: 9 paper-doll slots — weapon, offhand, helm, chest, ring ×2, amulet
 
 **THE WAYPOINT NETWORK**: stones stand in every act's town (auto-claimed on arrival) and on **floors 3 and 5** of every descent. Touch one to claim it forever and open the network panel — every stone you've claimed, grouped by act; click to move the whole party. The **caravan wagon** at each town's east edge rolls to the next act (or names the boss still barring the way).
 
-**The descent:** every floor is procedurally generated — five layout algorithms (halls, warrens, grand vaults, caverns, concentric rings) under fifteen palettes, each with its own ambient score. Find the purple stairs — guarded by the floor's boss — and **click them** to take the whole party down. Difficulty, item level, and gold all scale with **true depth** across acts (+35%/+30% per step), packs grow, elite odds climb, and deeper items roll bigger stats and better bases.
+**The descent:** every floor is procedurally generated — five layout algorithms (halls, warrens, grand vaults, caverns, concentric rings) under fifteen palettes, each with its own ambient score. Find the purple stairs — guarded by the floor's boss — and **click them** to take the whole party down. Difficulty, item level, and gold all scale with **true depth** across acts (monster HP/damage +35%/+30% per step through the four-act campaign, easing to +22%/+20% in the endless Abyss so it stays a fight rather than a bullet-sponge), packs grow, elite odds climb, and deeper items roll bigger stats and better bases.
 
 Classes (primary attack is always free; everything else comes from the tree):
 - **Barbarian** — melee sweep · Bash, Whirlwind, Leap Slam, Battle Shout, War Cry · ult **Wrath of the Mountain**

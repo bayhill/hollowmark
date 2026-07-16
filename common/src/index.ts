@@ -1258,11 +1258,19 @@ export const MORTAR_DMG: [number, number] = [8, 14]; // per shell, before floor 
 export const WARD_INTERVAL_MS = 6200; // between wards (measured ward-start to ward-start)
 export const WARD_DURATION_MS = 2100; // how long each bubble holds
 
-export function floorHpMult(floor: number): number {
-  return 1 + 0.35 * (floor - 1);
+// Depth scaling eases past a full campaign's worth of danger. Through the base 4-act game monster
+// HP/damage climb steeply — players are still gaining levels and gear. In the endless deep (past
+// danger 28), where base player growth has largely stopped and only paragon trickles in, the slope
+// gentles so the Abyss stays a fight instead of ballooning into a 30× bullet-sponge that also
+// one-shots you. Continuous at the knee — no cliff. (danger = (act-1)*7 + floor + difficulty offset.)
+export const DEPTH_TAPER_DANGER = 28; // one full 4-act campaign
+export function floorHpMult(danger: number): number {
+  if (danger <= DEPTH_TAPER_DANGER) return 1 + 0.35 * (danger - 1);
+  return 1 + 0.35 * (DEPTH_TAPER_DANGER - 1) + 0.22 * (danger - DEPTH_TAPER_DANGER);
 }
-export function floorDmgMult(floor: number): number {
-  return 1 + 0.3 * (floor - 1);
+export function floorDmgMult(danger: number): number {
+  if (danger <= DEPTH_TAPER_DANGER) return 1 + 0.3 * (danger - 1);
+  return 1 + 0.3 * (DEPTH_TAPER_DANGER - 1) + 0.2 * (danger - DEPTH_TAPER_DANGER);
 }
 export function floorXpMult(floor: number): number {
   return 1 + 0.25 * (floor - 1);
@@ -2206,7 +2214,8 @@ export const RARITY_WEIGHTS: Array<[Rarity, number]> = [
   ["epic", 0.6],
 ];
 
-export const DROP_CHANCE = 0.15; // true scarcity — most kills drop NOTHING, and that's the point
+export const DROP_CHANCE = 0.11; // true scarcity — most kills drop NOTHING. trimmed from 0.15 once packs
+// grew from 5 to 12 (that ~2.4×'d per-floor loot); 0.11 holds the "Great Drought" feel with denser packs
 export const LOOT_DESPAWN_MS = 90000;
 export const PICKUP_RANGE = 48;
 export const AUTO_PICKUP_RANGE = 28; // gold & potions hoover up when walked over
