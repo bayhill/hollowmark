@@ -1150,7 +1150,17 @@ export class DungeonRoom extends Room<DungeonState> {
         player.statPoints = Math.max(0, profile.statPoints ?? 0);
         player.skillPoints = Math.max(0, profile.skillPoints ?? 0);
         player.skills = profile.skills ?? {};
-        player.binds = (profile.binds ?? {}) as Partial<Record<SkillKey, string>>;
+        // migrate legacy skill binds (Q/E/F) to the number row (1/2/3); keep valid 1-6
+        {
+          const legacy: Record<string, SkillKey> = { Q: "1", E: "2", F: "3" };
+          const raw = (profile.binds ?? {}) as Record<string, string>;
+          const migrated: Partial<Record<SkillKey, string>> = {};
+          for (const [k, v] of Object.entries(raw)) {
+            const key = (legacy[k] ?? k) as SkillKey;
+            if (v && SKILL_KEYS.includes(key)) migrated[key] = v;
+          }
+          player.binds = migrated;
+        }
         player.paragonLevel = Math.max(0, profile.paragonLevel ?? 0);
         player.paragonXp = Math.max(0, profile.paragonXp ?? 0);
         player.paragonPoints = Math.max(0, profile.paragonPoints ?? 0);
