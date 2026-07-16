@@ -76,6 +76,12 @@ import {
   FE_EXPLODE_RADIUS,
   FE_EXPLODE_MULT,
   VAMPIRIC_HEAL_FRAC,
+  MORTAR_INTERVAL_MS,
+  MORTAR_TELEGRAPH_MS,
+  MORTAR_RADIUS,
+  MORTAR_DMG,
+  WARD_INTERVAL_MS,
+  WARD_DURATION_MS,
   MANA_POTION_DROP_CHANCE,
   MANA_POTION_RESTORE_FRACTION,
   BOSS_MANA_POTION_DROPS,
@@ -516,6 +522,13 @@ export class Monster extends Schema {
   bleedNextAt = 0;
   bleedBy = ""; // who opened the wound
   fleeUntil = 0; // fallen scatter when a packmate dies
+  // behavioral champion timers (server-only; the client is driven by broadcasts)
+  mortarAt = 0; // Mortar: when the next shell launches (telegraph begins)
+  mortarFireAt = 0; // …and when the shell in the air lands
+  mortarTX = 0; // the ground it was aimed at (locked at launch, so you can dodge)
+  mortarTY = 0;
+  wardUntil = 0; // Warded: incoming damage is refused while now < this
+  nextWardAt = 0; // …and when the next bubble goes up
 }
 
 // a hired Rogue: follows her employer, shoots what threatens them, can die
@@ -762,6 +775,17 @@ export class DungeonRoom extends Room<DungeonState> {
       // Dev-only: remove a specific spawned monster (so an affix probe can reset between runs).
       this.onMessage("smokeclear", (_client: Client, msg: { id?: string }) => {
         if (msg?.id) this.state.monsters.delete(msg.id);
+      });
+      // Dev-only, self-only: give the caller a huge hp pool so an affix probe can sit in sustained
+      // combat without dying and respawning back to town (which would break aggro-gated tests).
+      // NOT immunity — the hero still takes real, measurable damage, just can't be killed mid-probe.
+      this.onMessage("smokegod", (client: Client) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        p.maxHp = 100000;
+        p.hp = 100000;
+        p.mana = p.maxMana;
+        p.immuneUntil = 0;
       });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
@@ -3403,6 +3427,10 @@ export class DungeonRoom extends Room<DungeonState> {
     const attacker = this.state.players.get(attackerId);
     const now = Date.now();
 
+    // Warded packs refuse the blow entirely while the bubble holds. No hp change, no procs,
+    // no leech — the persistent bubble on the client is the "why". Burst them in the gaps.
+    if (now < m.wardUntil) return;
+
     let resisted = false;
     if (attacker) {
       // Executioner: bonus damage to wounded targets
@@ -5091,11 +5119,17 @@ export class DungeonRoom extends Room<DungeonState> {
           if (MONSTER_AI[m.kind] === "charger") m.chargeAt = now + 2000;
         }
         if (m.kind === "goblin") this.broadcast("goblinspotted", { x: m.x, y: m.y });
+        // stagger the behavioral packs' first special so the whole camp doesn't fire as one
+        if (m.modifier === "mortar") m.mortarAt = now + 800 + Math.random() * MORTAR_INTERVAL_MS;
+        if (m.modifier === "warded") m.nextWardAt = now + 1500 + Math.random() * 2000;
       }
 
       // brood-mothers and nova lords work their horrors even while they kite
       if (BROOD_BOSSES.includes(m.kind)) this.updateQueenBrood(m, now);
       if (NOVA_BOSSES[m.kind]) this.updateNova(m, now);
+      // behavioral champion packs: their tricks run while aggroed, alongside normal movement
+      if (m.modifier === "mortar") this.updateMortar(m, foe, now);
+      else if (m.modifier === "warded") this.updateWard(m, id, now);
       // ranged monsters: keep distance and shoot — data-driven, one table row per kind
       const ranged = RANGED_MONSTERS[m.kind];
       if (ranged) {
@@ -5313,6 +5347,46 @@ export class DungeonRoom extends Room<DungeonState> {
       m.novaFireAt = now + NOVA_TELEGRAPH_MS;
       m.novaAt = now + NOVA_INTERVAL_MS;
       this.broadcast("novacharge", { x: m.x, y: m.y, r: NOVA_RADIUS, ms: NOVA_TELEGRAPH_MS, hue: flavor.hue });
+    }
+  }
+
+  // Mortar champions lob shells at where you're standing: a ring warns, then the ground erupts.
+  // The target is locked when the shell launches, so keep moving and the blast lands on nothing.
+  private updateMortar(m: Monster, foe: { x: number; y: number }, now: number) {
+    if (m.mortarFireAt > 0) {
+      if (now >= m.mortarFireAt) {
+        m.mortarFireAt = 0;
+        this.broadcast("mortarhit", { x: m.mortarTX, y: m.mortarTY, r: MORTAR_RADIUS });
+        this.state.players.forEach((p, sid) => {
+          if (p.hp <= 0) return;
+          if (Math.hypot(p.x - m.mortarTX, p.y - m.mortarTY) <= MORTAR_RADIUS) {
+            this.damagePlayer(
+              sid,
+              p,
+              Math.round(rollDamage(MORTAR_DMG) * floorDmgMult(this.danger()) * m.dmgMult),
+              `${m.name || "a mortar"} shell`
+            );
+          }
+        });
+      }
+      return;
+    }
+    if (now >= m.mortarAt) {
+      m.mortarTX = foe.x; // lock the aim now — dodgeable by design
+      m.mortarTY = foe.y;
+      m.mortarFireAt = now + MORTAR_TELEGRAPH_MS;
+      m.mortarAt = now + MORTAR_INTERVAL_MS;
+      this.broadcast("mortarwarn", { x: m.mortarTX, y: m.mortarTY, r: MORTAR_RADIUS, ms: MORTAR_TELEGRAPH_MS });
+    }
+  }
+
+  // Warded champions raise a bubble that eats all damage for a beat, then drop it. The client
+  // reads "wardup" (with its duration) and paints a shield that follows the monster.
+  private updateWard(m: Monster, id: string, now: number) {
+    if (now >= m.nextWardAt) {
+      m.wardUntil = now + WARD_DURATION_MS;
+      m.nextWardAt = now + WARD_INTERVAL_MS;
+      this.broadcast("wardup", { id, x: m.x, y: m.y, ms: WARD_DURATION_MS });
     }
   }
 

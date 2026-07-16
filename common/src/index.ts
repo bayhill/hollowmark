@@ -1248,6 +1248,16 @@ export const NOVA_TELEGRAPH_MS = 1200;
 export const NOVA_RADIUS = 110;
 export const NOVA_DMG: [number, number] = [15, 25];
 
+// behavioral champion packs — the telegraph-based pair
+// Mortar: lobs a shell at where you're standing; a ring warns, then the ground erupts. Keep moving.
+export const MORTAR_INTERVAL_MS = 3400; // between shells, per Mortar champion
+export const MORTAR_TELEGRAPH_MS = 950; // warning-ring lead time before it lands
+export const MORTAR_RADIUS = 52; // blast radius — small enough to sidestep
+export const MORTAR_DMG: [number, number] = [8, 14]; // per shell, before floor scaling
+// Warded: raises a periodic bubble that eats ALL damage. Burst it in the gaps, or wait it out.
+export const WARD_INTERVAL_MS = 6200; // between wards (measured ward-start to ward-start)
+export const WARD_DURATION_MS = 2100; // how long each bubble holds
+
 export function floorHpMult(floor: number): number {
   return 1 + 0.35 * (floor - 1);
 }
@@ -1794,6 +1804,8 @@ export interface ChampionMod {
   // behavioral mods — these change how you FIGHT the pack, not just its numbers
   vampiric?: boolean; // heals itself for a slice of every blow it lands — burst it down
   reflect?: number; // throws this fraction of each melee blow back at the attacker
+  mortar?: boolean; // lobs telegraphed AoE shells at your position — keep moving
+  warded?: boolean; // raises a periodic damage-immunity bubble — burst it in the gaps
   aura?: number; // client aura tint (defaults to champion blue when absent)
 }
 
@@ -1810,6 +1822,8 @@ export const CHAMPION_MODS: ChampionMod[] = [
   // behavioral packs — the label warns you, the fight plays differently
   { id: "vampiric", label: "Vampiric", hpMult: 1.4, dmgMult: 1.1, speedMult: 1, cdMult: 1, vampiric: true, aura: 0xc0303a },
   { id: "spiked", label: "Spiked", hpMult: 1.6, dmgMult: 1, speedMult: 0.95, cdMult: 1, reflect: 0.15, aura: 0xe0872a },
+  { id: "mortar", label: "Mortar", hpMult: 1.3, dmgMult: 1, speedMult: 0.95, cdMult: 1, mortar: true, aura: 0x6ad0b0 },
+  { id: "warded", label: "Warded", hpMult: 1.5, dmgMult: 1.05, speedMult: 1, cdMult: 1, warded: true, aura: 0xc9b24a },
 ];
 
 export const FE_EXPLODE_RADIUS = 75;

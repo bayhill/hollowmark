@@ -835,6 +835,43 @@ export class GameScene extends Phaser.Scene {
         this.floatText(msg.x, msg.y, "the brood stirs…", "#9fbf6f");
         this.sfx.squelch();
       });
+      room.onMessage("mortarwarn", (msg: any) => {
+        // a Mortar shell is inbound — a ground ring that fills toward the moment it lands
+        const s = worldToScreen(msg.x, msg.y);
+        const hue = 0xffa030;
+        const ring = this.add
+          .ellipse(s.x, s.y, msg.r * 2, msg.r, hue, 0.1)
+          .setStrokeStyle(2, hue, 0.85)
+          .setDepth(s.y - 1);
+        const fill = this.add.ellipse(s.x, s.y, 2, 1, hue, 0.3).setDepth(s.y - 1);
+        this.tweens.add({ targets: fill, width: msg.r * 2, height: msg.r, duration: msg.ms, ease: "quad.in" });
+        this.tweens.add({ targets: ring, alpha: 0.5, duration: 180, yoyo: true, repeat: Math.ceil(msg.ms / 360) });
+        this.time.delayedCall(msg.ms, () => { ring.destroy(); fill.destroy(); });
+        this.sfx.novaWarn();
+      });
+      room.onMessage("mortarhit", (msg: any) => {
+        const s = worldToScreen(msg.x, msg.y);
+        const blast = this.add.ellipse(s.x, s.y, msg.r * 2, msg.r, 0xd07a2a, 0.7).setDepth(s.y + 2).setScale(0.25);
+        this.tweens.add({ targets: blast, scale: 1.1, alpha: 0, duration: 360, onComplete: () => blast.destroy() });
+        for (let i = 0; i < 6; i++) {
+          const clod = this.add
+            .rectangle(s.x + (Math.random() - 0.5) * msg.r, s.y + (Math.random() - 0.5) * msg.r * 0.6, 3, 2, 0x6b4a2a, 0.9)
+            .setDepth(s.y + 3);
+          this.tweens.add({ targets: clod, y: clod.y - 14 - Math.random() * 12, alpha: 0, duration: 380, onComplete: () => clod.destroy() });
+        }
+        this.cameras.main.shake(140, 0.005);
+        this.sfx.hit();
+      });
+      room.onMessage("wardup", (msg: any) => {
+        // a Warded champion raised its bubble — a shield that follows it for the duration
+        const ent = this.monsters.get(msg.id);
+        if (!ent) return;
+        const bubble = this.add.circle(0, -8, 17, 0xf0e07a, 0.16).setStrokeStyle(2, 0xf7ee9a, 0.85);
+        ent.container.add(bubble);
+        this.tweens.add({ targets: bubble, alpha: 0.32, scale: 1.08, duration: 500, yoyo: true, repeat: Math.ceil(msg.ms / 1000) });
+        this.time.delayedCall(msg.ms, () => bubble.destroy());
+        this.sfx.shrine();
+      });
       room.onMessage("shrinefx", (msg: any) => {
         const s = worldToScreen(msg.x, msg.y);
         const theme = FLOOR_THEMES[visualThemeFor(this.room?.state.act ?? 1, this.room?.state.floor ?? 1)];
