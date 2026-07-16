@@ -239,6 +239,8 @@ export class UIScene extends Phaser.Scene {
     });
     this.input.keyboard?.on("keydown-J", () => !this.chatActive && this.toggleQuests());
     this.input.keyboard?.on("keydown-H", () => !this.chatActive && this.toggleMercPanel());
+    // U hides the top info bar — for a cleaner, more immersive screen
+    this.input.keyboard?.on("keydown-U", () => !this.chatActive && this.hud.setVisible(!this.hud.visible));
 
     // chat entry + the escape ladder (chat → panels → game menu) share one listener
     this.chatBar = this.add
@@ -1619,6 +1621,7 @@ export class UIScene extends Phaser.Scene {
       ["Map (mini / full / off)", "M"],
       ["Ping the party", "G"],
       ["Toggle torch light", "L"],
+      ["Toggle top info bar", "U"],
       ["Chat", "Enter"],
       ["This menu", "Esc"],
     ];
