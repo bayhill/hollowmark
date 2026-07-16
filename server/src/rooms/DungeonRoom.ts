@@ -831,9 +831,18 @@ export class DungeonRoom extends Room<DungeonState> {
       // descending is deliberate: you must ask, and you must be standing there
       const p = this.state.players.get(client.sessionId);
       if (!p || p.hp <= 0) return;
-      // a Rift is a single sealed arena — there is no way down, only through the horde
+      // a Rift is a single sealed arena — there is no way down, only through the horde. The lock
+      // message reflects where you ARE in the run, so it never misleads (esp. once it's cleared).
       if (this.isRift) {
-        client.send("stairslocked", { text: "the Rift has no way down — cull the horde, then face the Warden" });
+        let text: string;
+        if (this.state.bountyDone) {
+          text = "the Rift is spent — step through the portal to go home";
+        } else if (this.riftBossSpawned) {
+          text = "the Rift Warden bars the way — put it down, then take the portal home";
+        } else {
+          text = `a Rift has no stairs — cull the horde (${this.state.bountyProgress}/${this.state.bountyGoal}) to summon the Warden`;
+        }
+        client.send("stairslocked", { text });
         return;
       }
       if (Math.hypot(p.x - this.state.stairsX, p.y - this.state.stairsY) > STAIRS_USE_RANGE) return;
