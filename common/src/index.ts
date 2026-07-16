@@ -3960,6 +3960,23 @@ export function hasSeatedStones(item: Pick<Item, "runes" | "jewels">): boolean {
   return (item.runes?.length ?? 0) + (item.jewels?.length ?? 0) > 0;
 }
 
+// the Ternion Altar's reforge: gamble an item's affixes for a fresh roll at the same base/rarity/ilvl.
+// only rolled gear qualifies — identified magic or rare, with no seated stones to lose. (Set/unique+
+// are hand-designed and can't be rerolled; commons have nothing to roll; runes/charms/jewels aren't gear.)
+export function canReforge(item: Pick<Item, "rarity" | "slot" | "unidentified" | "runes" | "jewels">): boolean {
+  if (item.rarity !== "magic" && item.rarity !== "rare") return false;
+  if (item.unidentified) return false;
+  if (item.slot === "rune" || item.slot === "charm" || item.slot === "jewel") return false;
+  return !hasSeatedStones(item);
+}
+
+// reforge fee: a steep, ilvl-scaled gold sink — rares cost far more than magics to re-roll
+export function reforgeCost(ilvl: number, rarity: Rarity): number {
+  const flat = rarity === "rare" ? 400 : 150;
+  const per = rarity === "rare" ? 120 : 60;
+  return flat + per * Math.max(0, ilvl - 1);
+}
+
 // charms roll magic (70%) or rare (30%); magic find nudges toward rare
 export function generateCharm(ilvl: number, magicFind = 0, rng: () => number = Math.random): Item {
   const base = CHARM_BASES[Math.floor(rng() * CHARM_BASES.length)];

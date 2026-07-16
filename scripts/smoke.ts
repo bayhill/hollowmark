@@ -63,7 +63,7 @@ async function main() {
   let playerWasHit = false;
   let lastLoadout: any = null;
   for (const r of [r1, r2]) {
-    for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "skilllearned", "dodge", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "socketed", "secondwind", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "victory", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "questdone", "shopbought", "shopfail", "vendorbought", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
+    for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "skilllearned", "dodge", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "socketed", "secondwind", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "reforgefx", "openaltar", "reforged", "victory", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "questdone", "shopbought", "shopfail", "vendorbought", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
       r.onMessage(t, () => {});
     }
     r.onMessage("hit", (msg: any) => {
@@ -1224,19 +1224,35 @@ async function main() {
     if (state().floor !== floorNow || state().act !== 1) throw new Error("waypoint jumped without discovery/unlock");
     console.log("waypoint network works: stone discovered, list delivered, undiscovered + locked jumps refused");
 
-    // the altar answers: a transmute if the bag holds a recipe, a hint if not
-    let altarHints = 0;
-    let transmutes: any = null;
-    r1.onMessage("transmutehint", () => altarHints++);
-    r1.onMessage("transmuted", (msg: any) => (transmutes = msg));
+    // the altar opens a panel: reforge-eligible items + recipe buttons. Reforge re-rolls an item's
+    // affixes for gold (same base/rarity/ilvl). Give the hero a rare + funds so the path is exercised.
+    let altarPanel: any = null;
+    let reforged: any = null;
+    let gave: any = null;
+    r1.onMessage("openaltar", (m: any) => (altarPanel = m));
+    r1.onMessage("reforged", (msg: any) => (reforged = msg));
+    r1.onMessage("smokegave", (msg: any) => (gave = msg));
     await moveNear(TOWN.transmute.x, TOWN.transmute.y, 45);
+    r1.send("smokegive", { rarity: "rare" });
+    await sleep(300);
+    if (!gave) throw new Error("smokegive did not hand over a rare");
     r1.send("touchshrine", { id: horId });
-    await sleep(600);
-    if (altarHints === 0 && !transmutes) throw new Error("Ternion Altar answered with neither recipe nor hint");
+    await sleep(500);
+    if (!altarPanel) throw new Error("Ternion Altar did not open its panel");
+    if (!Array.isArray(altarPanel.reforge) || !altarPanel.recipes) throw new Error("altar panel missing reforge list / recipes");
+    const cand = (altarPanel.reforge as any[]).find((r) => r.id === gave.id);
+    if (!cand) throw new Error("the granted rare was not offered as reforgeable");
+    const beforeStats = JSON.stringify(lastLoadout?.inventory?.find((it: any) => it.id === cand.id)?.stats ?? {});
+    r1.send("reforge", { id: cand.id });
+    await sleep(500);
+    if (!reforged) throw new Error("reforge produced no result");
+    // the server's charge is authoritative (a raw gold-delta races the +gold from smokegive's sync)
+    if (reforged.cost !== cand.price) throw new Error(`reforge cost ${reforged.cost} != panel price ${cand.price}`);
+    const after = lastLoadout?.inventory?.find((it: any) => it.id === cand.id);
+    if (!after) throw new Error("reforged item vanished (id not preserved)");
+    if (after.base !== cand.base || after.rarity !== cand.rarity) throw new Error("reforge changed base/rarity");
     console.log(
-      transmutes
-        ? `Ternion Altar works: ${transmutes.recipe} → ${transmutes.result}`
-        : "Ternion Altar works: explains its recipes to the empty-handed"
+      `Ternion Altar works: reforged ${cand.name} for ${reforged.cost}g — same base/rarity/id, affixes ${beforeStats === JSON.stringify(after.stats) ? "held" : "re-rolled"} (panel: ${altarPanel.reforge.length} reforgeable, recipes ${JSON.stringify(altarPanel.recipes)})`
     );
 
     // --- Maren: three rogues for hire, level-priced, gear-capable ---
@@ -1975,7 +1991,7 @@ async function main() {
   const r3 = await c3.create("dungeon", { key: smokeKey }); // brand-new room, same identity
   let reload: any = null;
   r3.onMessage("loadout", (msg: any) => (reload = msg));
-  for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "gamblefail", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "socketed", "secondwind", "skilllearned", "dodge", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "victory", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "quests", "questdone", "openshop", "shopbought", "shopfail", "openvendor", "vendorbought", "opengamble", "gambled", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
+  for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "gamblefail", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "socketed", "secondwind", "skilllearned", "dodge", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "reforgefx", "openaltar", "reforged", "victory", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "quests", "questdone", "openshop", "shopbought", "shopfail", "openvendor", "vendorbought", "opengamble", "gambled", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
     r3.onMessage(t, () => {});
   }
   await sleep(700);

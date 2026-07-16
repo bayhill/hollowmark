@@ -66,6 +66,8 @@ import {
   socketPunchCost,
   unsocketCost,
   hasSeatedStones,
+  canReforge,
+  reforgeCost,
   maxSockets,
   UNIDENTIFIED_RARITIES,
   BASE_ITEMS,
@@ -283,6 +285,7 @@ import {
   HP_PER_LEVEL,
   INVENTORY_SIZE,
   Item,
+  Rarity,
   ItemStats,
   LOOT_DESPAWN_MS,
   AUTO_PICKUP_RANGE,
@@ -787,12 +790,29 @@ export class DungeonRoom extends Room<DungeonState> {
         p.mana = p.maxMana;
         p.immuneUntil = 0;
       });
+      // Dev-only, self-only: hand the caller an identified magic/rare item and a pile of gold so an
+      // altar probe can deterministically reforge (a reforgeable item + funds aren't guaranteed to
+      // exist mid-grind). Returns the item's id so the probe can watch it change.
+      this.onMessage("smokegive", (client: Client, msg: { rarity?: string }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        const rarity: Rarity = msg?.rarity === "rare" ? "rare" : "magic";
+        const it = generateItem(Math.max(1, this.danger()), 0, Math.random, [[rarity, 1]]);
+        delete it.unidentified;
+        p.inventory.push(it);
+        p.gold += 5000;
+        this.sendLoadout(client, p);
+        client.send("smokegave", { id: it.id, name: it.name, rarity: it.rarity });
+      });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
       this.handleSocketRune(client, msg)
     );
     this.onMessage("identify", (client: Client, msg: { id: string }) => this.handleIdentify(client, msg));
     this.onMessage("opensmith", (client: Client) => this.sendSmith(client));
+    this.onMessage("openaltar", (client: Client) => this.sendAltar(client));
+    this.onMessage("altarrecipe", (client: Client, msg: { recipe?: string }) => this.handleAltarRecipe(client, msg));
+    this.onMessage("reforge", (client: Client, msg: { id?: string }) => this.handleReforge(client, msg));
     this.onMessage("punchsockets", (client: Client, msg: { id: string }) => this.handlePunchSockets(client, msg));
     this.onMessage("unsocket", (client: Client, msg: { id: string }) => this.handleUnsocket(client, msg));
     this.onMessage("touchshrine", (client: Client, msg: { id: string }) => this.handleShrine(client, msg));
@@ -2001,92 +2021,133 @@ export class DungeonRoom extends Room<DungeonState> {
 
   // --- town: portal, stash, vendor ---
 
-  // the Ternion Altar: The Peg Leg → a portal that shouldn't exist;
-  // 3 identical runes → the next rune; 3 magic items → a rare
-  private handleTransmute(client: Client, p: Player, s: Shrine) {
-    // the legendary recipe
-    const legIdx = p.inventory.findIndex((it) => it.name === "The Peg Leg");
-    if (legIdx >= 0) {
-      p.inventory.splice(legIdx, 1);
-      const portal = new Shrine();
-      const pos = this.scatter(s.x + 40, s.y + 40);
-      portal.x = pos.x;
-      portal.y = pos.y;
-      portal.kind = "cowportal";
-      portal.label = "??? (there is no meadow)";
-      this.state.shrines.set(`cowportal_${this.nextId++}`, portal);
-      this.broadcast("cowopen", { x: portal.x, y: portal.y });
-      this.sendLoadout(client, p);
-      return;
+  // --- the Ternion Altar: reforge + the recipe book ---
+
+  // open the altar panel: reforge-eligible items (gamble their affixes for gold) + which recipes
+  // can fire right now (rune upgrade, 3 magic → rare, 3 rare → Adept's craft, the peg-leg secret).
+  private sendAltar(client: Client) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !this.nearTownSpot(p, TOWN.transmute)) return;
+    const reforge = p.inventory
+      .filter((it) => canReforge(it))
+      .map((it) => ({ id: it.id, base: it.base, name: it.name, rarity: it.rarity, slot: it.slot, ilvl: it.ilvl, price: reforgeCost(it.ilvl, it.rarity) }));
+    let runeup: string | null = null; // the lowest rune tier you can currently upgrade
+    for (let tier = 0; tier < RUNE_ORDER.length - 1 && !runeup; tier++) {
+      const key = RUNE_ORDER[tier];
+      if (p.inventory.filter((it) => it.slot === "rune" && it.base === `rune_${key}`).length >= TRANSMUTE_RUNES_NEEDED) runeup = RUNES[key].name;
     }
-    // rune upgrading — the recipe every D2 player knows by heart
-    for (let tier = 0; tier < RUNE_ORDER.length - 1; tier++) {
-      const runeKey = RUNE_ORDER[tier];
-      const matches = p.inventory.filter((it) => it.slot === "rune" && it.base === `rune_${runeKey}`);
-      if (matches.length >= TRANSMUTE_RUNES_NEEDED) {
-        for (let i = 0; i < TRANSMUTE_RUNES_NEEDED; i++) {
-          p.inventory.splice(p.inventory.findIndex((it) => it.id === matches[i].id), 1);
+    const magics = p.inventory.filter((it) => it.rarity === "magic" && it.slot !== "rune" && it.slot !== "charm" && !it.unidentified).length;
+    const rares = p.inventory.filter((it) => it.rarity === "rare" && it.slot !== "rune" && it.slot !== "charm" && it.slot !== "jewel").length;
+    client.send("openaltar", {
+      gold: p.gold,
+      reforge,
+      recipes: {
+        runeup,
+        magics: magics >= TRANSMUTE_MAGICS_NEEDED,
+        rares: rares >= TRANSMUTE_MAGICS_NEEDED,
+        pegleg: p.inventory.some((it) => it.name === "The Peg Leg"),
+      },
+    });
+  }
+
+  // reforge one item: gamble its affixes for a fresh roll at the same base/rarity/ilvl, for gold
+  private handleReforge(client: Client, msg: { id?: string }) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !msg?.id || !this.nearTownSpot(p, TOWN.transmute)) return;
+    const idx = p.inventory.findIndex((it) => it.id === msg.id);
+    if (idx < 0) return;
+    const item = p.inventory[idx];
+    if (!canReforge(item)) return;
+    const cost = reforgeCost(item.ilvl, item.rarity);
+    if (p.gold < cost) { client.send("reforgefail", { cost }); return; }
+    p.gold -= cost;
+    const fresh = generateItem(item.ilvl, 0, Math.random, [[item.rarity, 1]], item.base);
+    fresh.id = item.id; // keep the id so worn/stash/UI references stay stable
+    delete fresh.unidentified; // you watched it happen — you know exactly what you got
+    p.inventory[idx] = fresh;
+    this.broadcast("reforgefx", { x: TOWN.transmute.x, y: TOWN.transmute.y });
+    this.questAdvance(p, client.sessionId, "ternion");
+    client.send("reforged", { name: fresh.name, rarity: fresh.rarity, cost });
+    this.sendLoadout(client, p);
+    this.persist(p);
+    this.sendAltar(client); // refresh the panel — the item (and its price) changed
+  }
+
+  // run one recipe from the altar panel's buttons (the old auto-fire book, now click-to-craft)
+  private handleAltarRecipe(client: Client, msg: { recipe?: string }) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !this.nearTownSpot(p, TOWN.transmute)) return;
+    const fx = () => this.broadcast("transmutefx", { x: TOWN.transmute.x, y: TOWN.transmute.y });
+    switch (msg?.recipe) {
+      case "pegleg": {
+        const legIdx = p.inventory.findIndex((it) => it.name === "The Peg Leg");
+        if (legIdx < 0) return;
+        p.inventory.splice(legIdx, 1);
+        const portal = new Shrine();
+        const pos = this.scatter(TOWN.transmute.x + 40, TOWN.transmute.y + 40);
+        portal.x = pos.x;
+        portal.y = pos.y;
+        portal.kind = "cowportal";
+        portal.label = "??? (there is no meadow)";
+        this.state.shrines.set(`cowportal_${this.nextId++}`, portal);
+        this.broadcast("cowopen", { x: portal.x, y: portal.y });
+        break;
+      }
+      case "runeup": {
+        let done = false;
+        for (let tier = 0; tier < RUNE_ORDER.length - 1 && !done; tier++) {
+          const runeKey = RUNE_ORDER[tier];
+          const matches = p.inventory.filter((it) => it.slot === "rune" && it.base === `rune_${runeKey}`);
+          if (matches.length >= TRANSMUTE_RUNES_NEEDED) {
+            for (let i = 0; i < TRANSMUTE_RUNES_NEEDED; i++) p.inventory.splice(p.inventory.findIndex((it) => it.id === matches[i].id), 1);
+            const nextKey = RUNE_ORDER[tier + 1];
+            const def = RUNES[nextKey];
+            p.inventory.push({ id: `rune_t_${this.nextId++}`, base: `rune_${nextKey}`, name: `${def.name} Rune`, slot: "rune", rarity: "magic", ilvl: this.danger(), stats: { ...def.stats } });
+            fx();
+            this.questAdvance(p, client.sessionId, "ternion");
+            client.send("transmuted", { result: `${def.name} Rune`, recipe: `3× ${RUNES[runeKey].name}` });
+            done = true;
+          }
         }
-        const nextKey = RUNE_ORDER[tier + 1];
-        const def = RUNES[nextKey];
-        p.inventory.push({
-          id: `rune_t_${this.nextId++}`,
-          base: `rune_${nextKey}`,
-          name: `${def.name} Rune`,
-          slot: "rune",
-          rarity: "magic",
-          ilvl: this.danger(),
-          stats: { ...def.stats },
-        });
-        this.broadcast("transmutefx", { x: s.x, y: s.y });
+        if (!done) return;
+        break;
+      }
+      case "magics": {
+        const magics = p.inventory.filter((it) => it.rarity === "magic" && it.slot !== "rune" && it.slot !== "charm" && !it.unidentified);
+        if (magics.length < TRANSMUTE_MAGICS_NEEDED) return;
+        const consumed = magics.slice(0, TRANSMUTE_MAGICS_NEEDED);
+        const ilvl = Math.max(...consumed.map((it) => it.ilvl));
+        for (const it of consumed) p.inventory.splice(p.inventory.findIndex((x) => x.id === it.id), 1);
+        const rare = generateItem(ilvl, 0, Math.random, [["rare", 1]]);
+        rare.unidentified = true;
+        p.inventory.push(rare);
+        fx();
         this.questAdvance(p, client.sessionId, "ternion");
-        client.send("transmuted", { result: `${def.name} Rune`, recipe: `3× ${RUNES[runeKey].name}` });
-        this.sendLoadout(client, p);
+        client.send("transmuted", { result: "an unidentified rare", recipe: "3× magic items" });
+        break;
+      }
+      case "rares": {
+        const rares = p.inventory.filter((it) => it.rarity === "rare" && it.slot !== "rune" && it.slot !== "charm" && it.slot !== "jewel");
+        if (rares.length < TRANSMUTE_MAGICS_NEEDED) return;
+        const consumed = rares.slice(0, TRANSMUTE_MAGICS_NEEDED);
+        const ilvl = Math.max(...consumed.map((it) => it.ilvl));
+        for (const it of consumed) p.inventory.splice(p.inventory.findIndex((x) => x.id === it.id), 1);
+        const crafted = generateItem(ilvl, 0, Math.random, [["rare", 1]]);
+        crafted.stats.plusSkills = (crafted.stats.plusSkills ?? 0) + 1; // the altar's true gift
+        crafted.name = `Adept's ${crafted.name}`;
+        crafted.unidentified = false;
+        p.inventory.push(crafted);
+        fx();
+        this.questAdvance(p, client.sessionId, "ternion");
+        client.send("transmuted", { result: `${crafted.name} (+1 skills)`, recipe: "3× rare items" });
+        break;
+      }
+      default:
         return;
-      }
     }
-    // 3 magic items → 1 rare at the highest of their ilvls
-    const magics = p.inventory.filter(
-      (it) => it.rarity === "magic" && it.slot !== "rune" && it.slot !== "charm" && !it.unidentified
-    );
-    if (magics.length >= TRANSMUTE_MAGICS_NEEDED) {
-      const consumed = magics.slice(0, TRANSMUTE_MAGICS_NEEDED);
-      const ilvl = Math.max(...consumed.map((it) => it.ilvl));
-      for (const it of consumed) {
-        p.inventory.splice(p.inventory.findIndex((x) => x.id === it.id), 1);
-      }
-      const rare = generateItem(ilvl, 0, Math.random, [["rare", 1]]);
-      rare.unidentified = true; // fresh from the altar, still humming
-      p.inventory.push(rare);
-      this.broadcast("transmutefx", { x: s.x, y: s.y });
-      this.questAdvance(p, client.sessionId, "ternion");
-      client.send("transmuted", { result: "an unidentified rare", recipe: "3× magic items" });
-      this.sendLoadout(client, p);
-      return;
-    }
-    // 3 rare items → 1 crafted rare IMBUED with a guaranteed +1 to skills. Targeted crafting:
-    // a deterministic path to the single most build-defining affix, so the chase isn't pure RNG.
-    const rares = p.inventory.filter(
-      (it) => it.rarity === "rare" && it.slot !== "rune" && it.slot !== "charm" && it.slot !== "jewel"
-    );
-    if (rares.length >= TRANSMUTE_MAGICS_NEEDED) {
-      const consumed = rares.slice(0, TRANSMUTE_MAGICS_NEEDED);
-      const ilvl = Math.max(...consumed.map((it) => it.ilvl));
-      for (const it of consumed) {
-        p.inventory.splice(p.inventory.findIndex((x) => x.id === it.id), 1);
-      }
-      const crafted = generateItem(ilvl, 0, Math.random, [["rare", 1]]);
-      crafted.stats.plusSkills = (crafted.stats.plusSkills ?? 0) + 1; // the altar's true gift
-      crafted.name = `Adept's ${crafted.name}`;
-      crafted.unidentified = false; // crafted knowingly — you know exactly what you made
-      p.inventory.push(crafted);
-      this.broadcast("transmutefx", { x: s.x, y: s.y });
-      this.questAdvance(p, client.sessionId, "ternion");
-      client.send("transmuted", { result: `${crafted.name} (+1 skills)`, recipe: "3× rare items" });
-      this.sendLoadout(client, p);
-      return;
-    }
-    client.send("transmutehint", {});
+    this.sendLoadout(client, p);
+    this.persist(p);
+    this.sendAltar(client);
   }
 
   // identify: pay the price of curiosity — or let Torvald squint at it for free
@@ -4001,7 +4062,7 @@ export class DungeonRoom extends Room<DungeonState> {
       return;
     }
     if (s.kind === "transmute") {
-      this.handleTransmute(client, p, s);
+      this.sendAltar(client); // opens the panel: recipes as buttons + the reforge list
       return;
     }
     if (s.kind === "cowportal") {

@@ -82,6 +82,11 @@ export class UIScene extends Phaser.Scene {
   private smithItems: Array<{ id: string; base: string; name: string; rarity: string; slot: string; source: "bag" | "worn" | "merc"; action: "punch" | "unsocket"; sockets?: number; seated?: number; price: number }> = [];
   smithVisible = false;
 
+  private altarRoot?: Phaser.GameObjects.Container;
+  private altarBounds = new Phaser.Geom.Rectangle(0, 0, 0, 0);
+  private altarData: { gold?: number; reforge?: Array<{ id: string; base: string; name: string; rarity: string; slot: string; ilvl: number; price: number }>; recipes?: { runeup?: string | null; magics?: boolean; rares?: boolean; pegleg?: boolean } } = {};
+  altarVisible = false;
+
   private mercHireRoot?: Phaser.GameObjects.Container;
   private mercHireBounds = new Phaser.Geom.Rectangle(0, 0, 0, 0);
   private mercOffers: any[] = [];
@@ -280,6 +285,7 @@ export class UIScene extends Phaser.Scene {
     if (this.vendorVisible && this.vendorBounds.contains(x, y)) return true;
     if (this.gambleVisible && this.gambleBounds.contains(x, y)) return true;
     if (this.smithVisible && this.smithBounds.contains(x, y)) return true;
+    if (this.altarVisible && this.altarBounds.contains(x, y)) return true;
     if (this.mercHireVisible && this.mercHireBounds.contains(x, y)) return true;
     if (this.mercVisible && this.mercBounds.contains(x, y)) return true;
     if (this.dialogueVisible && this.dialogueBounds.contains(x, y)) return true;
@@ -519,6 +525,106 @@ export class UIScene extends Phaser.Scene {
     root.add(hint);
     this.smithRoot = root;
     this.smithBounds.setTo(root.x, root.y, W, H);
+  }
+
+  // --- the Ternion Altar: reforge + recipe book ---
+
+  openAltar(data: typeof this.altarData) {
+    this.altarData = data ?? {};
+    this.altarVisible = true;
+    this.rebuildAltar();
+  }
+
+  closeAltar() {
+    this.altarVisible = false;
+    this.altarRoot?.destroy();
+    this.altarRoot = undefined;
+  }
+
+  private rebuildAltar() {
+    this.altarRoot?.destroy();
+    const W = 400;
+    const recipeRowH = 30;
+    const rowH = 48;
+    const gold = this.myGold();
+    const rc = this.altarData.recipes ?? {};
+    const reforge = this.altarData.reforge ?? [];
+
+    const recipes: Array<{ key: string; label: string; avail: boolean }> = [
+      { key: "runeup", label: rc.runeup ? `upgrade 3× ${rc.runeup} runes → next tier` : "3× identical runes → next rune tier", avail: !!rc.runeup },
+      { key: "magics", label: "3× magic items → an unidentified rare", avail: !!rc.magics },
+      { key: "rares", label: "3× rare items → an Adept's rare (+1 skills)", avail: !!rc.rares },
+    ];
+    if (rc.pegleg) recipes.push({ key: "pegleg", label: "The Peg Leg → ???", avail: true });
+
+    const recipesTop = 60;
+    const reforgeHeaderY = recipesTop + recipes.length * recipeRowH + 6;
+    const reforgeTop = reforgeHeaderY + 22;
+    const nItems = Math.max(1, reforge.length);
+    const H = reforgeTop + nItems * rowH + 26;
+
+    const root = this.buildStorefront(W, H, "THE TERNION ALTAR", 0x7a4a8a, "#c88ad8", () => this.closeAltar());
+    root.add(this.add.text(W / 2, 44, "gamble an item's affixes for gold — or work a recipe", {
+      fontFamily: "monospace", fontSize: "11px", color: "#a888b8", fontStyle: "italic",
+    }).setOrigin(0.5, 0));
+
+    // recipe buttons — the old auto-fire book, now click-to-craft
+    recipes.forEach((r, i) => {
+      const ry = recipesTop + i * recipeRowH;
+      const trim = r.avail ? 0x4a8a5a : 0x3a3a42;
+      const cell = this.add.rectangle(W / 2, ry + recipeRowH / 2 - 3, W - 20, recipeRowH - 5, 0x141a16)
+        .setStrokeStyle(1.5, trim, 0.9);
+      if (r.avail) {
+        cell.setInteractive({ useHandCursor: true });
+        cell.on("pointerover", () => cell.setFillStyle(0x1e2a20));
+        cell.on("pointerout", () => cell.setFillStyle(0x141a16));
+        cell.on("pointerdown", () => this.gs.room?.send("altarrecipe", { recipe: r.key }));
+      }
+      const label = this.add.text(18, ry + 6, r.label, {
+        fontFamily: "monospace", fontSize: "11px", color: r.avail ? "#a8d8b0" : "#5a5a62",
+      });
+      root.add([cell, label]);
+    });
+
+    root.add(this.add.text(W / 2, reforgeHeaderY, "— REFORGE —", {
+      fontFamily: "monospace", fontSize: "10px", color: "#8a7a96", fontStyle: "bold",
+    }).setOrigin(0.5, 0));
+
+    if (reforge.length === 0) {
+      root.add(this.add.text(W / 2, reforgeTop + 14, "no reforgeable gear — bring identified magic or rare", {
+        fontFamily: "monospace", fontSize: "12px", color: "#8a8a96",
+      }).setOrigin(0.5, 0));
+    }
+
+    reforge.forEach((e, i) => {
+      const ry = reforgeTop + i * rowH;
+      const afford = gold >= e.price;
+      const cell = this.add.rectangle(W / 2, ry + rowH / 2 - 2, W - 20, rowH - 5, 0x1a1720)
+        .setStrokeStyle(1.5, afford ? 0x7a4a8a : 0x3a3a42, 0.9)
+        .setInteractive({ useHandCursor: true });
+      cell.on("pointerover", () => cell.setFillStyle(0x262030));
+      cell.on("pointerout", () => cell.setFillStyle(0x1a1720));
+      cell.on("pointerdown", () => this.gs.room?.send("reforge", { id: e.id }));
+      const iconKey = `icon_${e.base}`;
+      const parts: Phaser.GameObjects.GameObject[] = [cell];
+      if (this.textures.exists(iconKey)) parts.push(this.add.image(28, ry + rowH / 2 - 2, iconKey).setScale(0.68));
+      const name = this.add.text(48, ry + 6, e.name, {
+        fontFamily: "monospace", fontSize: "13px", color: rarityColorStr(e.rarity), fontStyle: "bold",
+      });
+      const sub = this.add.text(48, ry + 24, `${e.slot} · ilvl ${e.ilvl} · re-roll all affixes`, {
+        fontFamily: "monospace", fontSize: "11px", color: "#a888b8",
+      });
+      const price = this.add.text(W - 20, ry + 13, `${e.price}g`, {
+        fontFamily: "monospace", fontSize: "14px", color: afford ? "#d8b13a" : "#7a5a5a", fontStyle: "bold",
+      }).setOrigin(1, 0);
+      root.add([...parts, name, sub, price]);
+    });
+
+    root.add(this.add.text(W / 2, H - 16, "reforge keeps the base, re-rolls the magic · recipes consume their reagents · Esc to leave", {
+      fontFamily: "monospace", fontSize: "9px", color: "#6a5e4e",
+    }).setOrigin(0.5, 0));
+    this.altarRoot = root;
+    this.altarBounds.setTo(root.x, root.y, W, H);
   }
 
   // --- Maren's rogues: hire, revive, outfit ---
@@ -1502,6 +1608,7 @@ export class UIScene extends Phaser.Scene {
         if (this.vendorVisible) this.closeVendor();
         if (this.gambleVisible) this.closeGamble();
         if (this.smithVisible) this.closeSmith();
+        if (this.altarVisible) this.closeAltar();
         if (this.mercHireVisible) this.closeMercHire();
         if (this.mercVisible) this.closeMercPanel();
         if (this.tradeVisible) this.cancelTrade();
@@ -1951,6 +2058,9 @@ export class UIScene extends Phaser.Scene {
     }
     if (this.gambleVisible && me && Math.hypot(me.schema.x - TOWN.fenwick.x, me.schema.y - TOWN.fenwick.y) > TOWN_INTERACT_RANGE + 40) {
       this.closeGamble();
+    }
+    if (this.altarVisible && me && Math.hypot(me.schema.x - TOWN.transmute.x, me.schema.y - TOWN.transmute.y) > TOWN_INTERACT_RANGE + 40) {
+      this.closeAltar();
     }
     if (this.mercHireVisible && me) {
       // the recruiter keeps the muster post in every town

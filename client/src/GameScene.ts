@@ -1230,6 +1230,24 @@ export class GameScene extends Phaser.Scene {
       room.onMessage("opensmith", (msg: any) => {
         this.ui?.openSmith(msg.items ?? []);
       });
+      room.onMessage("openaltar", (msg: any) => {
+        this.ui?.openAltar(msg ?? {});
+      });
+      room.onMessage("reforged", (msg: any) => {
+        const me = this.players.get(this.room?.sessionId ?? "");
+        if (me) this.floatText(me.schema.x, me.schema.y, `reforged: ${msg.name} (-${msg.cost}g)`, rarityColorStr(msg.rarity));
+        this.sfx.drop(msg.rarity);
+      });
+      room.onMessage("reforgefail", (msg: any) => {
+        const me = this.players.get(this.room?.sessionId ?? "");
+        if (me) this.floatText(me.schema.x, me.schema.y, `need ${msg.cost}g to reforge`, "#e05050");
+      });
+      room.onMessage("reforgefx", (msg: any) => {
+        const s = worldToScreen(msg.x, msg.y);
+        const ring = this.add.circle(s.x, s.y - 10, 10, 0xc88ad8, 0.7).setDepth(s.y + 3);
+        this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 500, onComplete: () => ring.destroy() });
+        this.sfx.shrine();
+      });
       room.onMessage("socketpunched", (msg: any) => {
         const me = this.players.get(this.room?.sessionId ?? "");
         if (me) this.floatText(me.schema.x, me.schema.y, `${msg.name}: ◈${msg.sockets} punched (-${msg.cost}g)`, "#ffb066");
