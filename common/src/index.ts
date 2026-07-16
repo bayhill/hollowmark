@@ -2360,6 +2360,17 @@ export const RUNEWORDS: Runeword[] = [
   { name: "Kingslayer", runes: ["drov", "karn", "kel", "rok"], slots: ["weapon"], bonus: { dmgPct: 30, crit: 8, dmg: 10 }, effect: "giantslayer" },
   { name: "Thornparade", runes: ["thurn", "vael", "drov"], slots: ["chest"], bonus: { armor: 10, thorns: 8, dmgPct: 10 }, effect: "adrenaline" },
   { name: "Worldsedge", runes: ["thurn", "drov", "ulth", "karn"], slots: ["weapon"], bonus: { dmgPct: 35, crit: 6, allRes: 8, dmg: 12 }, effect: "executioner" },
+  // the second book — armor gets its due, and two more four-socket grails for the deep
+  { name: "Wardvigil", runes: ["zel", "hym", "ghal"], slots: ["helm"], bonus: { allRes: 10, maxMana: 20, dodge: 4 } },
+  { name: "Mindspire", runes: ["kel", "zel", "mur"], slots: ["helm"], bonus: { maxMana: 30, manaRegen: 4, cdr: 8 }, effect: "arcane_surge" },
+  { name: "Ironbark", runes: ["thurn", "ghal", "vek"], slots: ["chest"], bonus: { armor: 14, maxHp: 30, thorns: 6 }, effect: "frost_armor" },
+  { name: "Tidecaller", runes: ["hym", "mur", "kel"], slots: ["offhand"], bonus: { coldDmg: 12, maxMana: 20, allRes: 8 }, effect: "frostnova_on_hit" },
+  { name: "Lightward", runes: ["zel", "ghal", "vek"], slots: ["offhand"], bonus: { lightRes: 20, armor: 8, cdr: 6 } },
+  { name: "Wyrmtongue", runes: ["fyr", "tor", "bren"], slots: ["weapon"], bonus: { fireDmg: 18, dmgPct: 16 }, effect: "immolation" },
+  { name: "Soulcinder", runes: ["vor", "kel", "zhar"], slots: ["weapon"], bonus: { dmg: 10, lifeSteal: 4, dmgPct: 14 }, effect: "corpse_explosion" },
+  { name: "Doomsayer", runes: ["karn", "drov", "thurn", "kel"], slots: ["weapon"], bonus: { dmgPct: 32, crit: 7, lifeSteal: 3, dmg: 12 }, effect: "executioner" },
+  { name: "Everstorm", runes: ["zel", "zhar", "karn", "vor"], slots: ["weapon"], bonus: { lightDmg: 22, dmgPct: 18, crit: 6 }, effect: "lightning_storm" },
+  { name: "Sanctuary", runes: ["ghal", "thurn", "ulth", "vek"], slots: ["chest"], bonus: { armor: 16, allRes: 16, maxHp: 30 }, effect: "aegis" },
 ];
 
 export function matchRuneword(item: Pick<Item, "slot" | "sockets" | "runes" | "rarity">): Runeword | null {
