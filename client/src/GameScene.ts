@@ -527,11 +527,12 @@ export class GameScene extends Phaser.Scene {
         }
       });
       $(room.state).pets.onAdd((pet: any, id: string) => {
-        // a raised servant: skeleton bones with a necrotic glow
+        // a raised servant: skeleton bones with a necrotic glow — the druid's spirit wolf runs amber
+        const isWolf = pet.kind === "wolf";
         const container = this.add.container(0, 0);
-        const glow = this.add.ellipse(0, 0, 20, 10, 0x5fae7f, 0.25);
-        const { figure } = buildMonsterFigure(this, "skeleton");
-        figure.setScale(0.85);
+        const glow = this.add.ellipse(0, 0, isWolf ? 24 : 20, isWolf ? 12 : 10, isWolf ? 0xc8903a : 0x5fae7f, isWolf ? 0.3 : 0.25);
+        const { figure } = buildMonsterFigure(this, isWolf ? "goatman" : "skeleton");
+        figure.setScale(isWolf ? 0.8 : 0.85);
         container.add([glow, figure]);
         const s = worldToScreen(pet.x, pet.y);
         container.setPosition(s.x, s.y).setDepth(s.y);
@@ -795,6 +796,16 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: [rift, core], scaleX: 1.18, scaleY: 1.18, alpha: 0.5, duration: 320, yoyo: true, repeat: Math.ceil(msg.ms / 640) });
         this.time.delayedCall(msg.ms, () => { rift.destroy(); core.destroy(); });
         this.sfx.ice();
+      });
+      room.onMessage("poolfx", (msg: any) => {
+        // a lingering ground pool (Aftershock quake, Contagion plague) — tinted, pulsing, for `ms`
+        const s = worldToScreen(msg.x, msg.y);
+        const pool = this.add
+          .ellipse(s.x, s.y, msg.r * 2, msg.r, msg.hue ?? 0x9a7050, 0.26)
+          .setStrokeStyle(2, msg.hue ?? 0xb08060, 0.7)
+          .setDepth(s.y - 2);
+        this.tweens.add({ targets: pool, alpha: 0.42, scaleX: 1.06, scaleY: 1.06, duration: 460, yoyo: true, repeat: Math.ceil((msg.ms ?? 1600) / 920) });
+        this.time.delayedCall(msg.ms ?? 1600, () => pool.destroy());
       });
       room.onMessage("dashfx", (msg: any) => this.onDashFx(msg));
       room.onMessage("socketed", (msg: any) => {

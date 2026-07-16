@@ -2171,6 +2171,22 @@ export const CHAIN_FORK_JUMPS = 2; // Stormfork: extra chain jumps
 export const CHAIN_FORK_STUN_MS = 700; // …and how long each struck foe is stunned
 export const RIFT_RADIUS = 56; // Riftwalk: the burning rift left at each teleport end
 export const RIFT_DURATION_MS = 2600;
+export const LEAP_QUAKE_MS = 1600; // Aftershock: the ground keeps rupturing after you land
+export const LEAP_QUAKE_MULT = 0.2;
+export const WARCRY_SHRED_MS = 4000; // Sundering Roar: how long the guard stays shredded
+export const WARCRY_KNOCKBACK = 44;
+export const FROST_SHATTER_RADIUS = 72; // Killing Frost: the cold nova a Frost Arrow shatters into
+export const FROST_SHATTER_MULT = 0.55;
+export const FROST_SHATTER_CHILL_MS = 1400;
+export const PIERCE_RICOCHET_ANGLE = 0.3; // Ricochet: the angle of the second bolt's lane
+export const ZEAL_NOVA_EVERY = 5; // Holy Fervor: every Nth Zeal cast detonates
+export const ZEAL_NOVA_RADIUS = 96;
+export const ZEAL_NOVA_MULT = 1.3;
+export const PRAYER_SHIELD_MS = 5000; // Sanctuary: the party shield lasts this long or until it eats a blow
+export const POISON_POOL_MS = 3200; // Contagion: the lingering plague pool
+export const POISON_POOL_MULT = 0.2;
+export const WITHER_SPREAD_RADIUS = 130; // Plaguecarrier: how far the curse leaps from a corpse
+export const VOLCANO_TWIN_DELAY_MS = 420; // Cataclysm: the second eruption's delay
 
 // --- items ---
 
@@ -2452,6 +2468,16 @@ export const SKILL_POWERS: Record<string, { skill: string; name: string; desc: s
   // Legendary Powers II
   chain_fork: { skill: "chain", name: "Stormfork", desc: "Chain Lightning forks to two more foes and stuns everything it strikes." },
   teleport_rift: { skill: "teleport", name: "Riftwalk", desc: "Teleport tears a burning arcane rift at both ends that keeps searing for a few seconds." },
+  leap_quake: { skill: "leap", name: "Aftershock", desc: "Leap Slam splits the ground where you land — a quake that keeps rupturing for a beat." },
+  warcry_shred: { skill: "warcry", name: "Sundering Roar", desc: "War Cry shreds the guard off everything it staggers (they take more damage) and hurls the pack back." },
+  frost_shatter: { skill: "coldarrow", name: "Killing Frost", desc: "Frost Arrow shatters on impact into a nova of cold." },
+  pierce_ricochet: { skill: "pierce", name: "Ricochet", desc: "Impaling Shot splits — a second bolt caroms off into a parallel lane." },
+  zeal_nova: { skill: "zeal", name: "Holy Fervor", desc: "Every fifth strike of Zeal detonates a nova of holy light." },
+  prayer_aegis: { skill: "prayer", name: "Sanctuary", desc: "Prayer wraps the whole party in a shield that swallows the next blow each." },
+  poison_lingering: { skill: "poisonnova", name: "Contagion", desc: "Poison Nova leaves a lingering plague pool that keeps eating the ground it covers." },
+  wither_spread: { skill: "decrepify", name: "Plaguecarrier", desc: "A withered foe's death spreads the curse to everything around the corpse." },
+  volcano_twin: { skill: "volcano", name: "Cataclysm", desc: "Volcano erupts a second time, just off-center, moments later." },
+  werewolf_howl: { skill: "werewolf", name: "Pack Leader", desc: "Shifting to Werewolf calls a spirit wolf to hunt at your side." },
 };
 export const FROSTBITE_CHANCE = 0.08;
 export const KNOCKBACK_CHANCE = 0.15;
@@ -2724,6 +2750,16 @@ export const FIXED_ITEMS: Array<{ base: string; name: string; rarity: Rarity; st
   { base: "warstaff", name: "Starfall", rarity: "epic", stats: { dmg: 8, fireDmg: 12, dmgPct: 22, maxMana: 30, plusSkills: 1 }, effect: "arcane_surge", power: "meteor_twice" },
   { base: "orb", name: "The Tempest Coil", rarity: "epic", stats: { lightDmg: 16, dmgPct: 22, maxMana: 30, cdr: 8, plusSkills: 1 }, effect: "chain_on_kill", power: "chain_fork" },
   { base: "warstaff", name: "Voidstride", rarity: "epic", stats: { dmg: 7, dmgPct: 20, maxMana: 30, moveSpd: 8, plusSkills: 1 }, effect: "arcane_surge", power: "teleport_rift" },
+  { base: "maul", name: "Groundsplitter", rarity: "epic", stats: { dmg: 11, dmgPct: 26, maxHp: 25, plusSkills: 1 }, effect: "berserk_low", power: "leap_quake" },
+  { base: "morningstar", name: "The Sundering", rarity: "epic", stats: { dmg: 10, dmgPct: 24, thorns: 6, plusSkills: 1 }, effect: "adrenaline", power: "warcry_shred" },
+  { base: "bow", name: "Winter's Recompense", rarity: "epic", stats: { dmg: 7, coldDmg: 12, atkSpd: 10, plusSkills: 1 }, effect: "frostnova_on_hit", power: "frost_shatter" },
+  { base: "quiver", name: "The Ricochet", rarity: "epic", stats: { dmg: 6, atkSpd: 12, crit: 7, plusSkills: 1 }, effect: "giantslayer", power: "pierce_ricochet" },
+  { base: "scepter", name: "The Zealot's Oath", rarity: "epic", stats: { dmg: 9, dmgPct: 24, maxHp: 20, plusSkills: 1 }, effect: "second_wind", power: "zeal_nova" },
+  { base: "kiteshield", name: "The Warding Light", rarity: "epic", stats: { armor: 14, allRes: 12, maxHp: 30, plusSkills: 1 }, effect: "aegis", power: "prayer_aegis" },
+  { base: "scythe", name: "The Plaguebringer", rarity: "epic", stats: { dmg: 8, dmgPct: 22, maxMana: 25, plusSkills: 1 }, effect: "corpse_explosion", power: "poison_lingering" },
+  { base: "wand", name: "The Long Withering", rarity: "epic", stats: { dmg: 6, dmgPct: 24, maxMana: 25, plusSkills: 1 }, effect: "mana_shield", power: "wither_spread" },
+  { base: "club", name: "Emberheart", rarity: "epic", stats: { dmg: 9, fireDmg: 12, dmgPct: 20, plusSkills: 1 }, effect: "immolation", power: "volcano_twin" },
+  { base: "warpike", name: "The Wildcaller", rarity: "epic", stats: { dmg: 12, dmgPct: 26, moveSpd: 8, plusSkills: 1 }, effect: "berserk_low", power: "werewolf_howl" },
   { base: "scepter", name: "Auric Verdict", rarity: "epic", stats: { dmg: 9, dmgPct: 25, maxHp: 20, plusSkills: 1 }, effect: "patriarch", power: "hammer_twin" },
   { base: "wand", name: "The Bone Choir", rarity: "epic", stats: { dmg: 7, maxMana: 25, dmgPct: 20, plusSkills: 1 }, effect: "corpse_explosion", power: "bone_legion" },
   { base: "club", name: "Tempest's Kiss", rarity: "epic", stats: { dmg: 8, coldDmg: 8, moveSpd: 8, plusSkills: 1 }, effect: "knockback_shot", power: "twister_swarm" },

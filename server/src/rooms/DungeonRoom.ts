@@ -16,6 +16,22 @@ import {
   CHAIN_FORK_STUN_MS,
   RIFT_RADIUS,
   RIFT_DURATION_MS,
+  LEAP_QUAKE_MS,
+  LEAP_QUAKE_MULT,
+  WARCRY_SHRED_MS,
+  WARCRY_KNOCKBACK,
+  FROST_SHATTER_RADIUS,
+  FROST_SHATTER_MULT,
+  FROST_SHATTER_CHILL_MS,
+  PIERCE_RICOCHET_ANGLE,
+  ZEAL_NOVA_EVERY,
+  ZEAL_NOVA_RADIUS,
+  ZEAL_NOVA_MULT,
+  PRAYER_SHIELD_MS,
+  POISON_POOL_MS,
+  POISON_POOL_MULT,
+  WITHER_SPREAD_RADIUS,
+  VOLCANO_TWIN_DELAY_MS,
   CLASSES,
   CLASS_ATTACKS,
   ClassName,
@@ -475,6 +491,8 @@ export class Player extends Schema {
   deathlessReadyAt = 0; // Undying: next free death
   immuneUntil = 0; // brief invulnerability after cheating death
   attackCounter = 0; // Stormlord counts your swings
+  zealCounter = 0; // Holy Fervor counts your Zeal casts
+  shieldUntil = 0; // Sanctuary: swallows the next blow while this holds
   lastImmolationAt = 0; // Immolation burn tick
   questProgress: Record<string, number> = {}; // quest id → progress
   questsDone: string[] = []; // rewarded quests never pay twice
@@ -521,6 +539,7 @@ export class Monster extends Schema {
   element: Element | "" = ""; // enchanted champions deal typed damage
   explodeOnDeath = false; // Fire Enchanted
   vulnUntil = 0; // decrepified — takes extra damage
+  curseSpreadsUntil = 0; // Plaguecarrier: this curse leaps to nearby foes when the host dies
   chargeAt = 0; // vuruk's next charge
   chargeUntil = 0; // …and how long the current one lasts
   chargeWindupUntil = 0; // …braced and telegraphing, before he launches
@@ -816,6 +835,17 @@ export class DungeonRoom extends Room<DungeonState> {
         if (!p || !msg?.id) return;
         p.powers.add(msg.id);
         client.send("smokepowered", { id: msg.id });
+      });
+      // Dev-only, self-only: jump the hero to a high level with spare skill points so a probe can
+      // learn tier-gated skills (and their prereqs) to test every class's powers without grinding.
+      this.onMessage("smokelevel", (client: Client, msg: { level?: number; points?: number }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        p.level = Math.max(p.level, Math.min(99, Math.floor(msg?.level ?? 20)));
+        p.skillPoints += Math.floor(msg?.points ?? 30);
+        this.recompute(p);
+        this.sendLoadout(client, p);
+        client.send("smokeleveled", { level: p.level, skillPoints: p.skillPoints });
       });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
@@ -2836,6 +2866,23 @@ export class DungeonRoom extends Room<DungeonState> {
   }
 
   // one meteor drop — factored out so Twinned Meteor (a skill-power) can call it twice
+  // one Volcano eruption — a burst + a lingering fire pool. Cataclysm calls this twice.
+  private volcanoErupt(sessionId: string, cx: number, cy: number, mult: number) {
+    const p = this.state.players.get(sessionId);
+    if (!p) return;
+    this.broadcast("classfx", { kind: "volcano", x: cx, y: cy, r: 90 });
+    const hits: string[] = [];
+    this.state.monsters.forEach((m, id) => {
+      const def = MONSTERS[m.kind as MonsterKind];
+      if (Math.hypot(m.x - cx, m.y - cy) <= 90 + def.radius) hits.push(id);
+    });
+    hits.forEach((id) => {
+      const m = this.state.monsters.get(id);
+      if (m) this.damageMonster(id, m, this.outgoingDamage(p, [9, 15], mult), sessionId);
+    });
+    this.hazards.push({ ax: cx, ay: cy, bx: cx, by: cy, width: 55, until: Date.now() + 3000, nextTick: Date.now(), owner: sessionId, mult: mult * 0.2 });
+  }
+
   private meteorStrike(sessionId: string, cx: number, cy: number, mult: number) {
     this.broadcast("meteorwarn", { x: cx, y: cy, r: METEOR_RADIUS, ms: METEOR_DELAY_MS });
     this.clock.setTimeout(() => {
@@ -2918,6 +2965,7 @@ export class DungeonRoom extends Room<DungeonState> {
 
       case "warcry": {
         this.broadcast("warcryfx", { id: sessionId, x: p.x, y: p.y, r: WARCRY_RADIUS });
+        const shred = p.powers.has("warcry_shred");
         const hits: string[] = [];
         this.state.monsters.forEach((m, id) => {
           const def = MONSTERS[m.kind as MonsterKind];
@@ -2927,6 +2975,16 @@ export class DungeonRoom extends Room<DungeonState> {
           const m = this.state.monsters.get(id);
           if (!m) return;
           m.stunUntil = now + WARCRY_STUN_MS;
+          // Sundering Roar: shred the guard (extra harm) and hurl the pack back
+          if (shred) {
+            m.vulnUntil = Math.max(m.vulnUntil, now + WARCRY_SHRED_MS);
+            const kx = m.x - p.x;
+            const ky = m.y - p.y;
+            const kd = Math.hypot(kx, ky) || 1;
+            const nx = m.x + (kx / kd) * WARCRY_KNOCKBACK;
+            const ny = m.y + (ky / kd) * WARCRY_KNOCKBACK;
+            if (canStand(this.map, nx, ny)) { m.x = nx; m.y = ny; }
+          }
           this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
         });
         break;
@@ -3076,6 +3134,19 @@ export class DungeonRoom extends Room<DungeonState> {
             }
           }, hit * 130);
         }
+        // Holy Fervor: every fifth Zeal detonates a nova of holy light
+        if (struck > 0 && p.powers.has("zeal_nova") && ++p.zealCounter % ZEAL_NOVA_EVERY === 0) {
+          this.broadcast("classfx", { kind: "prayer", x: p.x, y: p.y, r: ZEAL_NOVA_RADIUS });
+          const novaHits: string[] = [];
+          this.state.monsters.forEach((m, id) => {
+            const def = MONSTERS[m.kind as MonsterKind];
+            if (Math.hypot(m.x - p.x, m.y - p.y) <= ZEAL_NOVA_RADIUS + def.radius) novaHits.push(id);
+          });
+          novaHits.forEach((id) => {
+            const m = this.state.monsters.get(id);
+            if (m) this.damageMonster(id, m, this.outgoingDamage(p, [9, 15], ZEAL_NOVA_MULT), sessionId);
+          });
+        }
         if (struck === 0) succeeded = false;
         break;
       }
@@ -3114,19 +3185,26 @@ export class DungeonRoom extends Room<DungeonState> {
       }
 
       case "prayer": {
-        // the whole party mends — the paladin's gift
+        // the whole party mends — the paladin's gift; Sanctuary also shields each ally
         this.broadcast("classfx", { kind: "prayer", x: p.x, y: p.y, r: PRAYER_RADIUS });
-        let healedAny = false;
+        const shield = p.powers.has("prayer_aegis");
+        let didSomething = false;
         const healAmt = this.outgoingDamage(p, [10, 14], mult);
         this.state.players.forEach((ally, sid) => {
           if (ally.hp <= 0 || Math.hypot(ally.x - p.x, ally.y - p.y) > PRAYER_RADIUS) return;
           const healed = Math.min(healAmt, ally.maxHp - ally.hp);
-          if (healed <= 0) return;
-          healedAny = true;
-          ally.hp += healed;
-          this.broadcast("heal", { id: sid, amount: healed, x: ally.x, y: ally.y });
+          if (healed > 0) {
+            ally.hp += healed;
+            didSomething = true;
+            this.broadcast("heal", { id: sid, amount: healed, x: ally.x, y: ally.y });
+          }
+          if (shield) {
+            ally.shieldUntil = now + PRAYER_SHIELD_MS; // swallows the next blow
+            didSomething = true;
+            this.broadcast("aegisfx", { id: sid, x: ally.x, y: ally.y });
+          }
         });
-        if (!healedAny) succeeded = false; // no wounds, no cost
+        if (!didSomething) succeeded = false; // no wounds and no shield to give, no cost
         break;
       }
 
@@ -3153,6 +3231,8 @@ export class DungeonRoom extends Room<DungeonState> {
           if (!m) return;
           m.vulnUntil = now + DECREPIFY_MS + (rank - 1) * 800;
           m.slowUntil = now + DECREPIFY_MS;
+          // Plaguecarrier: this curse will leap to the pack when the host dies
+          if (p.powers.has("wither_spread")) m.curseSpreadsUntil = now + DECREPIFY_MS + (rank - 1) * 800;
           this.damageMonster(id, m, this.outgoingDamage(p, [8, 14], mult), sessionId);
         });
         break;
@@ -3169,6 +3249,11 @@ export class DungeonRoom extends Room<DungeonState> {
           const m = this.state.monsters.get(id);
           if (m) this.damageMonster(id, m, this.outgoingDamage(p, [8, 14], mult), sessionId);
         });
+        // Contagion: a plague pool lingers where the nova broke, eating the ground it covers
+        if (p.powers.has("poison_lingering")) {
+          this.hazards.push({ ax: p.x, ay: p.y, bx: p.x, by: p.y, width: POISONNOVA_RADIUS, until: now + POISON_POOL_MS, nextTick: now, owner: sessionId, mult: mult * POISON_POOL_MULT });
+          this.broadcast("poolfx", { x: p.x, y: p.y, r: POISONNOVA_RADIUS, ms: POISON_POOL_MS, hue: 0x7ac850 });
+        }
         break;
       }
 
@@ -3252,20 +3337,11 @@ export class DungeonRoom extends Room<DungeonState> {
       case "volcano": {
         const cx = p.x + dirX * Math.min(len, 240);
         const cy = p.y + dirY * Math.min(len, 240);
-        this.broadcast("classfx", { kind: "volcano", x: cx, y: cy, r: 90 });
-        const hits: string[] = [];
-        this.state.monsters.forEach((m, id) => {
-          const def = MONSTERS[m.kind as MonsterKind];
-          if (Math.hypot(m.x - cx, m.y - cy) <= 90 + def.radius) hits.push(id);
-        });
-        hits.forEach((id) => {
-          const m = this.state.monsters.get(id);
-          if (m) this.damageMonster(id, m, this.outgoingDamage(p, [9, 15], mult), sessionId);
-        });
-        this.hazards.push({
-          ax: cx, ay: cy, bx: cx, by: cy, width: 55,
-          until: now + 3000, nextTick: now, owner: sessionId, mult: mult * 0.2,
-        });
+        this.volcanoErupt(sessionId, cx, cy, mult);
+        // Cataclysm: a second mountain heaves up just off-center a beat later
+        if (p.powers.has("volcano_twin")) {
+          this.clock.setTimeout(() => this.volcanoErupt(sessionId, cx + 46, cy + 28, mult), VOLCANO_TWIN_DELAY_MS);
+        }
         break;
       }
 
@@ -3283,6 +3359,19 @@ export class DungeonRoom extends Room<DungeonState> {
       case "werewolf": {
         p.wolfUntil = now + WOLF_DURATION_MS + (rank - 1) * WOLF_DURATION_PER_RANK_MS;
         this.broadcast("classfx", { kind: "wolf", x: p.x, y: p.y, r: 30 });
+        // Pack Leader: the howl calls a spirit wolf to hunt beside you
+        if (p.powers.has("werewolf_howl")) {
+          const pet = new Pet();
+          const pos = this.scatter(p.x, p.y);
+          pet.x = pos.x;
+          pet.y = pos.y;
+          pet.owner = sessionId;
+          pet.kind = "wolf";
+          pet.dmg = Math.max(1, this.outgoingDamage(p, [8, 14], mult));
+          pet.until = now + PET_DURATION_MS;
+          this.state.pets.set(`pet_${this.nextId++}`, pet);
+          this.broadcast("classfx", { kind: "raise", x: pos.x, y: pos.y, r: 40 });
+        }
         break;
       }
 
@@ -3442,27 +3531,38 @@ export class DungeonRoom extends Room<DungeonState> {
           }
           this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
         });
+        // Aftershock: the ground where you landed keeps rupturing for a beat
+        if (p.powers.has("leap_quake")) {
+          this.hazards.push({ ax: lx, ay: ly, bx: lx, by: ly, width: LEAP_RADIUS, until: now + LEAP_QUAKE_MS, nextTick: now, owner: sessionId, mult: mult * LEAP_QUAKE_MULT });
+          this.broadcast("poolfx", { x: lx, y: ly, r: LEAP_RADIUS, ms: LEAP_QUAKE_MS, hue: 0xd07a2a });
+        }
         break;
       }
 
       case "pierce": {
-        const ex = p.x + dirX * PIERCE_LENGTH;
-        const ey = p.y + dirY * PIERCE_LENGTH;
-        this.broadcast("piercefx", { fromX: p.x, fromY: p.y, toX: ex, toY: ey });
-        const hits: string[] = [];
-        this.state.monsters.forEach((m, id) => {
-          const def = MONSTERS[m.kind as MonsterKind];
-          // project monster onto the shot line
-          const t = ((m.x - p.x) * dirX + (m.y - p.y) * dirY);
-          if (t < 0 || t > PIERCE_LENGTH) return;
-          const px = p.x + dirX * t;
-          const py = p.y + dirY * t;
-          if (Math.hypot(m.x - px, m.y - py) <= PIERCE_WIDTH / 2 + def.radius) hits.push(id);
-        });
-        hits.forEach((id) => {
-          const m = this.state.monsters.get(id);
-          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
-        });
+        // Ricochet: a second bolt caroms off into a parallel lane
+        const baseA = Math.atan2(dirY, dirX);
+        const angles = p.powers.has("pierce_ricochet") ? [0, PIERCE_RICOCHET_ANGLE] : [0];
+        for (const off of angles) {
+          const ax = Math.cos(baseA + off);
+          const ay = Math.sin(baseA + off);
+          const ex = p.x + ax * PIERCE_LENGTH;
+          const ey = p.y + ay * PIERCE_LENGTH;
+          this.broadcast("piercefx", { fromX: p.x, fromY: p.y, toX: ex, toY: ey });
+          const hits: string[] = [];
+          this.state.monsters.forEach((m, id) => {
+            const def = MONSTERS[m.kind as MonsterKind];
+            const t = (m.x - p.x) * ax + (m.y - p.y) * ay; // project onto the shot line
+            if (t < 0 || t > PIERCE_LENGTH) return;
+            const px = p.x + ax * t;
+            const py = p.y + ay * t;
+            if (Math.hypot(m.x - px, m.y - py) <= PIERCE_WIDTH / 2 + def.radius) hits.push(id);
+          });
+          hits.forEach((id) => {
+            const m = this.state.monsters.get(id);
+            if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
+          });
+        }
         break;
       }
 
@@ -3659,6 +3759,22 @@ export class DungeonRoom extends Room<DungeonState> {
       const def = MONSTERS[m.kind as MonsterKind];
       this.broadcast("death", { t: "m", id, kind: m.kind, x: m.x, y: m.y });
       this.state.monsters.delete(id);
+
+      // Plaguecarrier: a withered host's death seeds the curse into everything around the corpse
+      if (now < m.curseSpreadsUntil) {
+        const spreadTo: Monster[] = [];
+        this.state.monsters.forEach((o, oid) => {
+          if (oid !== id && Math.hypot(o.x - m.x, o.y - m.y) <= WITHER_SPREAD_RADIUS) spreadTo.push(o);
+        });
+        if (spreadTo.length) {
+          spreadTo.forEach((o) => {
+            o.vulnUntil = Math.max(o.vulnUntil, now + DECREPIFY_MS);
+            o.slowUntil = Math.max(o.slowUntil, now + DECREPIFY_MS);
+            o.curseSpreadsUntil = Math.max(o.curseSpreadsUntil, now + DECREPIFY_MS); // the plague keeps leaping
+          });
+          this.broadcast("classfx", { kind: "curse", x: m.x, y: m.y, r: WITHER_SPREAD_RADIUS });
+        }
+      }
 
       // Fire Enchanted champions go out with a bang — respect the corpse
       if (m.explodeOnDeath) {
@@ -4264,6 +4380,12 @@ export class DungeonRoom extends Room<DungeonState> {
     if (p.hp <= 0) return;
     const nowPre = Date.now();
     if (nowPre < p.immuneUntil) return; // the Undying cannot be touched, briefly
+    // Sanctuary (Prayer power): the party shield swallows one blow, then breaks
+    if (nowPre < p.shieldUntil) {
+      p.shieldUntil = 0;
+      this.broadcast("aegisfx", { id: sessionId, x: p.x, y: p.y });
+      return;
+    }
     // Aegis: one hit, refused outright
     if (p.effects.has("aegis") && nowPre >= p.aegisReadyAt) {
       p.aegisReadyAt = nowPre + AEGIS_CD_MS;
@@ -4808,6 +4930,20 @@ export class DungeonRoom extends Room<DungeonState> {
           if (proj.chillMs > 0) m.slowUntil = Date.now() + proj.chillMs; // frost arrows bite deep
           this.damageMonster(directHitId, m, this.outgoingDamage(owner, atk.dmg, mult), proj.owner);
         }
+      }
+      // Killing Frost: a Frost Arrow shatters into a nova of cold on impact
+      if (proj.kind === "icearrow" && owner.powers.has("frost_shatter")) {
+        this.broadcast("frostfx", { x, y, r: FROST_SHATTER_RADIUS });
+        const near: string[] = [];
+        this.state.monsters.forEach((m, mid) => {
+          if (Math.hypot(m.x - x, m.y - y) <= FROST_SHATTER_RADIUS) near.push(mid);
+        });
+        near.forEach((mid) => {
+          const m = this.state.monsters.get(mid);
+          if (!m) return;
+          m.slowUntil = Date.now() + FROST_SHATTER_CHILL_MS;
+          if (mid !== directHitId) this.damageMonster(mid, m, this.outgoingDamage(owner, atk.dmg, FROST_SHATTER_MULT), proj.owner);
+        });
       }
     }
 
