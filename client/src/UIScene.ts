@@ -50,6 +50,7 @@ export class UIScene extends Phaser.Scene {
   private chatLog: Array<{ txt: Phaser.GameObjects.Text; bornAt: number }> = [];
   private menuOpen = false;
   private menuRoot?: Phaser.GameObjects.Container;
+  private helpRoot?: Phaser.GameObjects.Container;
 
   private quests: Array<{ id: string; name: string; desc: string; act?: number; goal: number; progress: number; done: boolean; rewardGold: number; rewardXp: number }> = [];
   private questRoot?: Phaser.GameObjects.Container;
@@ -1475,6 +1476,7 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     if (ev.key === "Escape") {
+      if (this.helpRoot) { this.helpRoot.destroy(); this.helpRoot = undefined; return; }
       if (this.dialogueVisible) { this.dialogueBack(); return; }
       if (this.mapMode === 1) {
         this.mapMode = 0; // fold the war table back into the corner
@@ -1559,7 +1561,7 @@ export class UIScene extends Phaser.Scene {
     if (!this.menuOpen) return;
 
     const w = 300;
-    const h = 190;
+    const h = 244;
     const x = (this.scale.width - w) / 2;
     const y = (this.scale.height - h) / 2;
     const root = this.add.container(x, y).setDepth(40);
@@ -1581,16 +1583,79 @@ export class UIScene extends Phaser.Scene {
       root.add([bg, txt]);
     };
 
-    button(70, "RESUME", "#7fdc9f", () => this.toggleMenu());
-    button(120, "EXIT TO LOBBY", "#e07a6a", () => {
+    button(66, "RESUME", "#7fdc9f", () => this.toggleMenu());
+    button(112, "HELP & CONTROLS", "#8ab0e8", () => { this.toggleMenu(); this.showHelp(); });
+    button(158, "EXIT TO LOBBY", "#e07a6a", () => {
       // progress persists server-side the moment we leave
       this.gs.room?.leave();
       setTimeout(() => location.reload(), 150);
     });
     root.add(
-      this.add.text(w / 2, h - 24, "your hero is saved automatically", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(0.5)
+      this.add.text(w / 2, h - 22, "your hero is saved automatically", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(0.5)
     );
     this.menuRoot = root;
+  }
+
+  // the decked-out controls reference — reachable via Esc → Help & Controls
+  private showHelp() {
+    this.helpRoot?.destroy();
+    const rows: Array<[string, string] | "sep" | string> = [
+      "COMBAT",
+      ["Move / loot", "Left-click"],
+      ["Attack", "Right-click (hold)"],
+      ["Skills", "1  2  3  4  5  6"],
+      ["Life potion", "Q"],
+      ["Mana potion", "W"],
+      "sep",
+      "PANELS",
+      ["Inventory", "I  /  B"],
+      ["Character", "C"],
+      ["Skill tree", "S"],
+      ["Quest log", "J"],
+      ["Mercenary", "H"],
+      "sep",
+      "WORLD",
+      ["Town portal", "T"],
+      ["Map (mini / full / off)", "M"],
+      ["Ping the party", "G"],
+      ["Toggle torch light", "L"],
+      ["Chat", "Enter"],
+      ["This menu", "Esc"],
+    ];
+
+    const w = 380;
+    const pad = 18;
+    let cy = 52;
+    const contentH = rows.reduce((a, r) => a + (r === "sep" ? 12 : 20), 0);
+    const h = cy + contentH + 26;
+    const x = (this.scale.width - w) / 2;
+    const y = (this.scale.height - h) / 2;
+    const root = this.add.container(x, y).setDepth(41);
+    root.add(this.add.rectangle(0, 0, w, h, 0x120f1a, 0.98).setOrigin(0).setStrokeStyle(2, 0x54402a));
+    root.add(this.add.rectangle(3, 3, w - 6, h - 6, 0x000000, 0).setOrigin(0).setStrokeStyle(1, 0xd8b13a, 0.3));
+    for (const [cx, cyy] of [[0, 0], [w - 5, 0], [0, h - 5], [w - 5, h - 5]]) {
+      root.add(this.add.rectangle(cx, cyy, 5, 5, 0xd8b13a, 0.75).setOrigin(0));
+    }
+    root.add(this.add.text(w / 2, 18, "CONTROLS", { fontFamily: "monospace", fontSize: "17px", color: "#e8d8a8", fontStyle: "bold", letterSpacing: 3 }).setOrigin(0.5));
+    root.add(this.add.text(w - 12, 12, "[Esc] close", { fontFamily: "monospace", fontSize: "10px", color: "#6a6a76" }).setOrigin(1, 0));
+
+    for (const r of rows) {
+      if (r === "sep") { cy += 12; continue; }
+      if (typeof r === "string") {
+        root.add(this.add.text(pad, cy, r, { fontFamily: "monospace", fontSize: "11px", color: "#8a8a96", fontStyle: "bold", letterSpacing: 2 }));
+        cy += 20;
+        continue;
+      }
+      root.add(this.add.text(pad, cy, r[0], { fontFamily: "monospace", fontSize: "13px", color: "#c9c9d4" }));
+      root.add(this.add.text(w - pad, cy, r[1], { fontFamily: "monospace", fontSize: "13px", color: "#e8cf7a", fontStyle: "bold" }).setOrigin(1, 0));
+      cy += 20;
+    }
+
+    // click anywhere on the backdrop closes it too
+    const bg = this.add.rectangle(0, 0, w, h, 0x000000, 0.001).setOrigin(0).setInteractive();
+    bg.on("pointerdown", () => { this.helpRoot?.destroy(); this.helpRoot = undefined; });
+    root.addAt(bg, 2);
+    this.helpRoot = root;
   }
 
   private buildHotbar(cls: string, binds: Partial<Record<SkillKey, string>>) {
@@ -1640,13 +1705,13 @@ export class UIScene extends Phaser.Scene {
       this.hotbarCells.push({ x, y: y0, skill: e.skill });
     });
 
-    // potion flask cells — red life (R), blue mana (W)
+    // potion flask cells — red life (Q), blue mana (W), sitting right below the 1-6 skills
     const px = x0 + entries.length * (CELL + GAP);
     this.potionCell = { x: px, y: y0 };
     const pbg = this.add.rectangle(px, y0, CELL, CELL, 0x1c1016, 0.92).setOrigin(0).setStrokeStyle(1, 0x6a2a34);
     pbg.setInteractive({ useHandCursor: true });
     pbg.on("pointerdown", () => this.gs.room?.send("drink"));
-    const pkey = this.add.text(px + 4, y0 + 3, "R", { fontFamily: "monospace", fontSize: "13px", color: "#ffd54a", fontStyle: "bold" });
+    const pkey = this.add.text(px + 4, y0 + 3, "Q", { fontFamily: "monospace", fontSize: "13px", color: "#ffd54a", fontStyle: "bold" });
     const neck = this.add.rectangle(px + CELL / 2, y0 + 18, 6, 8, 0x882233);
     const bulb = this.add.circle(px + CELL / 2, y0 + 30, 10, 0xcc3344).setStrokeStyle(1, 0x000000, 0.5);
     this.potionCount = this.add
@@ -2080,7 +2145,7 @@ export class UIScene extends Phaser.Scene {
         ? `  |  BOUNTY: ${st.bountyText} ${st.bountyDone ? "✔" : `(${st.bountyProgress}/${st.bountyGoal})`}`
         : "";
       this.hud.setText(
-        `${["", "", "NIGHTMARE — ", "HELL — "][room.state.difficulty ?? 1] ?? ""}${room.state.zoneName || "?"} — ${(room.state.act ?? 1) >= 5 ? `Abyss ${room.state.floor}` : `Act ${room.state.act ?? 1} · floor ${room.state.floor}`}  ·  ${me.schema.name || ""} lvl ${me.schema.level} ${gs.myCls} — LMB move/loot · RMB attack · Q/E/F skills · R/W potions · T town · [I] bag · [C] hero · [S] skills · [J] quests · [H] merc · [M] map/full/off${bounty}  |  players: ${count}  monsters: ${mobs}${pts > 0 ? `  ·  ★ ${pts} points to spend!` : ""}`
+        `${["", "", "NIGHTMARE — ", "HELL — "][room.state.difficulty ?? 1] ?? ""}${room.state.zoneName || "?"} — ${(room.state.act ?? 1) >= 5 ? `Abyss ${room.state.floor}` : `Act ${room.state.act ?? 1} · floor ${room.state.floor}`}  ·  ${me.schema.name || ""} lvl ${me.schema.level} ${gs.myCls}${bounty}  |  players: ${count}  monsters: ${mobs}${pts > 0 ? `  ·  ★ ${pts} points to spend!` : ""}  ·  Esc: menu & help`
       );
     } else {
       this.hud.setText(gs?.connectionStatus ?? "connecting…");

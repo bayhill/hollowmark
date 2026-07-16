@@ -966,7 +966,7 @@ const NODE = 44;
 
 export class SkillPanel {
   visible = false;
-  bindPending: string | null = null; // learned active waiting for a Q/E/F press
+  bindPending: string | null = null; // learned active waiting for a 1-6 press
 
   private root: Phaser.GameObjects.Container;
   private tooltip: Phaser.GameObjects.Container;
@@ -1014,7 +1014,7 @@ export class SkillPanel {
     if (this.visible && dirty) this.render();
   }
 
-  // UIScene routes Q/E/F here first while a bind is pending
+  // UIScene routes 1-6 here first while a bind is pending
   tryBind(key: SkillKey): boolean {
     if (!this.bindPending) return false;
     this.actions.bind(this.bindPending, key);
@@ -1116,7 +1116,7 @@ export class SkillPanel {
       node.type === "passive"
         ? canAlloc ? "click: learn" : ""
         : rank > 0
-          ? `${canAlloc ? "click: rank up · " : ""}right-click: bind to Q/E/F`
+          ? `${canAlloc ? "click: rank up · " : ""}right-click: bind to 1-6`
           : canAlloc ? "click: learn (auto-binds)" : "";
     if (hint) {
       texts.push(this.scene.add.text(10, y, hint, { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }));
@@ -1181,7 +1181,7 @@ export class SkillPanel {
     if (this.bindPending) {
       const node = nodes.find((n) => n.id === this.bindPending);
       this.root.add(
-        this.scene.add.text(SKILL_W - 12, 28, `press Q/E/F to bind ${node?.name ?? ""}`, {
+        this.scene.add.text(SKILL_W - 12, 28, `press 1-6 to bind ${node?.name ?? ""}`, {
           fontFamily: "monospace", fontSize: "12px", color: "#ffd54a", fontStyle: "bold",
         }).setOrigin(1, 0)
       );

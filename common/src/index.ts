@@ -2050,8 +2050,8 @@ export function skillById(cls: ClassName, id: string): SkillNode | null {
   return SKILL_TREES[cls]?.find((s) => s.id === id) ?? null;
 }
 
-export type SkillKey = "Q" | "E" | "F";
-export const SKILL_KEYS: SkillKey[] = ["Q", "E", "F"];
+export type SkillKey = "1" | "2" | "3" | "4" | "5" | "6";
+export const SKILL_KEYS: SkillKey[] = ["1", "2", "3", "4", "5", "6"];
 
 // can this hero put a point into this node right now?
 export function canAllocSkill(

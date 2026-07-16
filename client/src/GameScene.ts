@@ -13,6 +13,7 @@ import {
   CLASS_ATTACKS,
   ClassName,
   skillById,
+  SkillKey,
   STAIRS_USE_RANGE,
   MONSTERS,
   MonsterKind,
@@ -295,10 +296,13 @@ export class GameScene extends Phaser.Scene {
       }
     );
 
-    this.input.keyboard?.on("keydown-Q", () => this.castSkill("Q"));
-    this.input.keyboard?.on("keydown-E", () => this.castSkill("E"));
-    this.input.keyboard?.on("keydown-F", () => this.castSkill("F"));
-    this.input.keyboard?.on("keydown-R", () => {
+    // skills live on the number row (1-6); potions sit right below on Q (life) / W (mana)
+    const NUM_KEYS: Array<[string, SkillKey]> = [
+      ["keydown-ONE", "1"], ["keydown-TWO", "2"], ["keydown-THREE", "3"],
+      ["keydown-FOUR", "4"], ["keydown-FIVE", "5"], ["keydown-SIX", "6"],
+    ];
+    for (const [ev, key] of NUM_KEYS) this.input.keyboard?.on(ev, () => this.castSkill(key));
+    this.input.keyboard?.on("keydown-Q", () => {
       if (this.ui?.chatActive) return;
       this.sfx.ensure();
       this.room?.send("drink");
@@ -3751,7 +3755,7 @@ export class GameScene extends Phaser.Scene {
     this.room.send("attack", { x: w.x, y: w.y });
   }
 
-  private castSkill(key: "Q" | "E" | "F") {
+  private castSkill(key: SkillKey) {
     if (!this.room || !this.myCls) return;
     if (this.ui?.chatActive) return; // the keys belong to the message
     // if the skill panel is waiting for a bind key, the press belongs to it
