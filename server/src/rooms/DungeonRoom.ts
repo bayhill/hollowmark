@@ -640,7 +640,7 @@ export class DungeonRoom extends Room<DungeonState> {
   private campAlive: number[] = [];
   private campRespawnAt: number[] = [];
   private bossRespawnAt = 0;
-  private pendingTravel: { act: number; floor: number } | null = null; // ALL travel funnels through here
+  private pendingTravel: { act: number; floor: number; atWaypoint?: boolean } | null = null; // ALL travel funnels through here
   private areaPortals = new Map<string, { x: number; y: number }>(); // shrine id → destination
   private vendorStock: Array<{ item: Item; price: number }> = []; // Torvald's shelves
   private mercOfferSeed = 1; // which three sisters stand with Maren this floor
@@ -786,7 +786,7 @@ export class DungeonRoom extends Room<DungeonState> {
         if (s.kind === "waypoint" && Math.hypot(p.x - s.x, p.y - s.y) <= TOWN_INTERACT_RANGE) near = true;
       });
       if (!near) return;
-      this.pendingTravel = { act, floor };
+      this.pendingTravel = { act, floor, atWaypoint: true }; // arrive AT the destination stone, not the entrance
       this.broadcast("waypointfx", { x: p.x, y: p.y, by: client.sessionId });
     });
     this.onMessage("townportal", (client: Client) => this.handleTownPortal(client));
@@ -1503,7 +1503,7 @@ export class DungeonRoom extends Room<DungeonState> {
 
   // --- floors ---
 
-  private startFloor(act: number, floor: number, cow = false, rift = false, tier = 0) {
+  private startFloor(act: number, floor: number, cow = false, rift = false, tier = 0, atWaypoint = false) {
     const seed = Math.floor(Math.random() * 2 ** 31);
     this.isCowLevel = cow;
     this.isRift = rift;
@@ -1788,11 +1788,15 @@ export class DungeonRoom extends Room<DungeonState> {
       this.spawnPilgrim(camp.x, camp.y);
     }
 
-    // gather the party at the new entrance; revive the fallen at half strength
+    // gather the party at the new entrance; revive the fallen at half strength.
+    // a waypoint jump lands you ON the destination stone, not at the floor entrance —
+    // town stone in the plaza, or the field stone wherever this fresh layout dropped it.
+    const wpStone = floor === 1 && act < ABYSS_ACT ? TOWN.waypoint : this.layout.waypoint;
+    const arrival = atWaypoint && wpStone ? wpStone : this.layout.spawn;
     let i = 0;
     this.state.players.forEach((p, sid) => {
-      p.x = p.targetX = this.layout.spawn.x + (i % 3) * 24;
-      p.y = p.targetY = this.layout.spawn.y + Math.floor(i / 3) * 24;
+      p.x = p.targetX = arrival.x + (i % 3) * 24;
+      p.y = p.targetY = arrival.y + Math.floor(i / 3) * 24;
       if (p.hp <= 0) p.hp = Math.floor(p.maxHp / 2);
       // a Rift is off the world-ladder entirely — it must not inflate depth/act/waypoint marks
       if (!rift) {
@@ -4409,7 +4413,7 @@ export class DungeonRoom extends Room<DungeonState> {
     } else if (this.pendingTravel) {
       const target = this.pendingTravel;
       this.pendingTravel = null;
-      this.startFloor(target.act, target.floor);
+      this.startFloor(target.act, target.floor, false, false, 0, target.atWaypoint);
     }
 
     // checkpoint everyone's progress every 10s
