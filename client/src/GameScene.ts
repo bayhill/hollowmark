@@ -3754,13 +3754,62 @@ export class GameScene extends Phaser.Scene {
 
   private sendMove(pointer: Phaser.Input.Pointer, marker: boolean) {
     if (!this.room || !this.clientMap) return;
+    const me = this.players.get(this.room.sessionId);
+    if (!me) return;
     pointer.updateWorldPoint(this.cameras.main);
     const w = screenToWorld(pointer.worldX, pointer.worldY);
-    if (!canStand(this.clientMap, w.x, w.y)) return;
-    this.walkPath = null; // steering by hand overrides any auto-walk
-    this.room.send("move", { x: w.x, y: w.y });
-    this.lastMoveSend = this.time.now;
+    // clicking a wall / tree / the void no longer does nothing — head for the nearest spot you CAN
+    // stand, so a slightly-off click still moves you instead of dropping silently.
+    const target = canStand(this.clientMap, w.x, w.y) ? w : this.nearestStandable(w.x, w.y);
+    if (!target) return;
     if (marker) this.showClickMarker(pointer.worldX, pointer.worldY);
+    // a clear straight shot is sent as-is (responsive). Anything with a wall in the way — trees,
+    // cathedral corners, and above all the ONE town gate — routes with BFS so the walk never jams
+    // against the wall and dead-stops (the "stuck in town next to the gate" bug).
+    if (this.lineClear(me.schema.x, me.schema.y, target.x, target.y)) {
+      this.walkPath = null; // steering by hand overrides any auto-walk
+      this.room.send("move", { x: target.x, y: target.y });
+    } else {
+      this.startAutoWalk(target.x, target.y);
+    }
+    this.lastMoveSend = this.time.now;
+  }
+
+  // the nearest tile whose centre a player can actually stand on, spiralling out from a clicked point
+  private nearestStandable(wx: number, wy: number): { x: number; y: number } | null {
+    const map = this.clientMap;
+    if (!map) return null;
+    const gx = Math.floor(wx / TILE);
+    const gy = Math.floor(wy / TILE);
+    for (let r = 1; r <= 10; r++) {
+      let best: { x: number; y: number } | null = null;
+      let bestD = Infinity;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // just the ring at this radius
+          const cx = (gx + dx + 0.5) * TILE;
+          const cy = (gy + dy + 0.5) * TILE;
+          if (!canStand(map, cx, cy)) continue;
+          const d = Math.hypot(cx - wx, cy - wy);
+          if (d < bestD) { bestD = d; best = { x: cx, y: cy }; }
+        }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
+  // is the straight segment between two points standable the whole way? (sampled every half tile)
+  private lineClear(x0: number, y0: number, x1: number, y1: number): boolean {
+    const map = this.clientMap;
+    if (!map) return false;
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / (TILE * 0.5)));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      if (!canStand(map, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
+    }
+    return true;
   }
 
   // click-to-interact from anywhere: BFS a tile path so the walk survives
@@ -4022,6 +4071,7 @@ export class GameScene extends Phaser.Scene {
         this.tryAttack(pointer);
       } else if (
         pointer.leftButtonDown() &&
+        !this.walkPath && // a BFS route is in progress — let the follower drive, don't stomp it
         this.time.now - this.lastMoveSend > 150 &&
         this.time.now - this.lootClickAt > 400 // a fresh loot click gets a head start over hold-to-walk
       ) {
