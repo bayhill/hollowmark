@@ -710,3 +710,12 @@ Two movement bugs, both in the client's ground-click handler (`sendMove`), both 
 ## Rift UX — the stairs-lock message tells the truth now
 
 A player in a Rift who pressed the (intentionally dead) stairs always got the same line — "cull the horde, then face the Warden" — even after the Warden was dead and the rift cleared, which read like the run was bugged/stuck. The message is now state-aware: it shows the kill progress toward summoning the Warden (`cull the horde (N/60)`), then "the Rift Warden bars the way" once it's up, then "the Rift is spent — step through the portal home" once cleared. (Rifts remain sealed with no descent by design — this only fixes the misleading text. The Abyss, reached by beating Act 4 and taking the real stairs, is unaffected.)
+
+## Legendary Powers II, slice 1 — the Sorcerer's two new chase items
+
+The "gear rewrites a skill" system (`SKILL_POWERS`) had exactly six powers — one per class, on one signature skill each — so only ~1 skill in 5 was ever build-defining. This begins tripling that. First vertical slice: the Sorcerer gets two more skill-transforming epics (6 → 8 powers total).
+
+- **The Tempest Coil** (orb) — **Stormfork**: Chain Lightning forks to **two more foes** (past its four-jump cap) and **stuns** everything it strikes. Turns the single-target zap into a room-clearing, crowd-locking chain.
+- **Voidstride** (warstaff) — **Riftwalk**: Teleport tears a **burning arcane rift at BOTH ends** — departure and arrival — each searing everything in it for a few seconds. Blink through a pack and leave two damage zones behind; escape becomes offense.
+- Built on the existing plumbing: powers ride the item's `power` field into `p.powers`, and each skill handler branches on it (Stormfork extends the chain's jump cap + applies `stunUntil`; Riftwalk pushes two point-hazards through the proven firewall damage system + a new `riftbloom` visual). Both new epics carry `plusSkills +1` like every power item.
+- **Verification.** `scratchpad/powers-probe.ts` proves both live: with Stormfork the chain strikes **6 foes vs the base 4**; Riftwalk fires **two** rift blooms (from + to) and ticks damage into a foe left in the departure rift. A new dev-only `smokepower` hook grants a power directly so the probe can test a handler branch without farming the epic. The smoke's data battery now also validates that every item `power` maps to a real `SKILL_POWERS` entry pointing at a real skill (catches future typos). Typecheck ×3, client build, full `npm run smoke` green.

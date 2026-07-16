@@ -1,7 +1,7 @@
 // Headless end-to-end test: two clients, movement, combat, xp, boss, skills,
 // loot (auto-equip), potions, and descending to floor 2 on a procedural map.
 import { Client, Room } from "colyseus.js";
-import { BASE_ITEMS, BOSS_SIGNATURES, CHAMPION_MODS, CLASSES, CLASS_ATTACKS, CLASS_BASE_ATTRS, EFFECTS, FIXED_ITEMS, FLOOR_THEMES, GAMBLE_WEIGHTS, GameMap, MERC_CLASSES, recruiterForAct, actTownNpcs, ACT_TOWN_NPCS, TOWN_NPCS, townNpcById, shrineNpcId, ENCOUNTERS, rollEncounter, encounterById, storytellerFor, MONSTER_ELEMENTS, MONSTERS, RANGED_MONSTERS, PORTAL_CAST_MS, PORTAL_RETURN_MS, QUESTS, TOWN_GATE_TX, TOWN_ROWS, RES_CAP, RUNES, RUNE_ORDER, RUNEWORDS, SETS, generateJewel, SKILL_TREES, TILE, TIER_LEVELS, TOWN, UNIDENTIFIED_RARITIES, attrBonus, bossKindForFloor, bountyGoalFor, bountyTextFor, canAllocSkill, canStand, hasLineOfSight, generateCharm, generateCowLevel, generateDungeon, generateFixedItem, generateItem, generateRune, identifyCost, isBossKind, isInTown, makeMap, matchRuneword, maxHpFor, pickMonsterKind, potionCapFor, resistOf, skillDamageMult, tileAt, visualThemeIndexForFloor, visualThemeFor, actBossKindFor, ACT_FLOORS, ABYSS_ACT } from "@hollowmark/common";
+import { BASE_ITEMS, BOSS_SIGNATURES, CHAMPION_MODS, CLASSES, CLASS_ATTACKS, CLASS_BASE_ATTRS, EFFECTS, FIXED_ITEMS, FLOOR_THEMES, GAMBLE_WEIGHTS, GameMap, MERC_CLASSES, recruiterForAct, actTownNpcs, ACT_TOWN_NPCS, TOWN_NPCS, townNpcById, shrineNpcId, ENCOUNTERS, rollEncounter, encounterById, storytellerFor, MONSTER_ELEMENTS, MONSTERS, RANGED_MONSTERS, PORTAL_CAST_MS, PORTAL_RETURN_MS, QUESTS, TOWN_GATE_TX, TOWN_ROWS, RES_CAP, RUNES, RUNE_ORDER, RUNEWORDS, SETS, generateJewel, SKILL_TREES, SKILL_POWERS, TILE, TIER_LEVELS, TOWN, UNIDENTIFIED_RARITIES, attrBonus, bossKindForFloor, bountyGoalFor, bountyTextFor, canAllocSkill, canStand, hasLineOfSight, generateCharm, generateCowLevel, generateDungeon, generateFixedItem, generateItem, generateRune, identifyCost, isBossKind, isInTown, makeMap, matchRuneword, maxHpFor, pickMonsterKind, potionCapFor, resistOf, skillDamageMult, tileAt, visualThemeIndexForFloor, visualThemeFor, actBossKindFor, ACT_FLOORS, ABYSS_ACT } from "@hollowmark/common";
 
 const ENDPOINT = "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -63,7 +63,7 @@ async function main() {
   let playerWasHit = false;
   let lastLoadout: any = null;
   for (const r of [r1, r2]) {
-    for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "skilllearned", "dodge", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "socketed", "secondwind", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "reforgefx", "openaltar", "reforged", "victory", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "questdone", "shopbought", "shopfail", "vendorbought", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
+    for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "riftbloom", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "skilllearned", "dodge", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "socketed", "secondwind", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "reforgefx", "openaltar", "reforged", "victory", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "questdone", "shopbought", "shopfail", "vendorbought", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
       r.onMessage(t, () => {});
     }
     r.onMessage("hit", (msg: any) => {
@@ -1660,6 +1660,17 @@ async function main() {
       if (names.has(f.name)) throw new Error(`duplicate fixed item name: ${f.name}`);
       names.add(f.name);
     }
+    // legendary skill-powers: every item power must be a real SKILL_POWERS entry pointing at a real skill
+    const skillIds = new Set(Object.values(SKILL_TREES).flat().map((s: any) => s.id));
+    for (const f of FIXED_ITEMS) {
+      if (!f.power) continue;
+      const pw = (SKILL_POWERS as any)[f.power];
+      if (!pw) throw new Error(`fixed item "${f.name}" has unknown power ${f.power}`);
+      if (!skillIds.has(pw.skill)) throw new Error(`power ${f.power} rewrites unknown skill ${pw.skill}`);
+    }
+    for (const [id, pw] of Object.entries(SKILL_POWERS as any)) {
+      if (!skillIds.has((pw as any).skill)) throw new Error(`SKILL_POWERS.${id} rewrites unknown skill ${(pw as any).skill}`);
+    }
     const byRarity = { unique: 0, legendary: 0, epic: 0 } as Record<string, number>;
     FIXED_ITEMS.forEach((f) => byRarity[f.rarity]++);
     // Fenwick's contract (pure): the promised base survives every rarity roll
@@ -1991,7 +2002,7 @@ async function main() {
   const r3 = await c3.create("dungeon", { key: smokeKey }); // brand-new room, same identity
   let reload: any = null;
   r3.onMessage("loadout", (msg: any) => (reload = msg));
-  for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "gamblefail", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "socketed", "secondwind", "skilllearned", "dodge", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "reforgefx", "openaltar", "reforged", "victory", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "quests", "questdone", "openshop", "shopbought", "shopfail", "openvendor", "vendorbought", "opengamble", "gambled", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
+  for (const t of ["swing", "impact", "death", "pickedup", "levelup", "whirl", "shout", "chainfx", "teleportfx", "dashfx", "riftbloom", "bossaggro", "heal", "descend", "goblinspotted", "goblinescape", "shrinefx", "novacharge", "novafire", "queenspawn", "gamblefx", "gamblefail", "chestfx", "lore", "portalcast", "portalfx", "portalcancel", "openstash", "vendorhint", "sold", "socketed", "secondwind", "skilllearned", "dodge", "golddrop", "identified", "identifyfail", "waypointfx", "waypoints", "stairslocked", "transmutefx", "transmuted", "transmutehint", "reforgefx", "openaltar", "reforged", "victory", "warcryfx", "ancientsfx", "vengeancefx", "firewallfx", "meteorwarn", "meteorfall", "bountydone", "pilgrim", "wandererdead", "manaheal", "cowopen", "chat", "mswing", "mheal", "mortarwarn", "mortarhit", "wardup", "classfx", "aegisfx", "deathlessfx", "culledfx", "quests", "questdone", "openshop", "shopbought", "shopfail", "openvendor", "vendorbought", "opengamble", "gambled", "ping", "announce", "grave", "hardcoredeath", "mercshot", "merchired", "mercdead", "encounter"]) {
     r3.onMessage(t, () => {});
   }
   await sleep(700);

@@ -784,6 +784,18 @@ export class GameScene extends Phaser.Scene {
           });
         }
       });
+      room.onMessage("riftbloom", (msg: any) => {
+        // Riftwalk: a torn arcane rift that lingers and pulses where a Sorcerer blinked
+        const s = worldToScreen(msg.x, msg.y);
+        const rift = this.add
+          .ellipse(s.x, s.y, msg.r * 2, msg.r, 0xb060ff, 0.28)
+          .setStrokeStyle(2, 0xd8a8ff, 0.9)
+          .setDepth(s.y - 1);
+        const core = this.add.ellipse(s.x, s.y, msg.r, msg.r * 0.5, 0xe0c0ff, 0.5).setDepth(s.y - 1);
+        this.tweens.add({ targets: [rift, core], scaleX: 1.18, scaleY: 1.18, alpha: 0.5, duration: 320, yoyo: true, repeat: Math.ceil(msg.ms / 640) });
+        this.time.delayedCall(msg.ms, () => { rift.destroy(); core.destroy(); });
+        this.sfx.ice();
+      });
       room.onMessage("dashfx", (msg: any) => this.onDashFx(msg));
       room.onMessage("socketed", (msg: any) => {
         const me = this.players.get(this.room?.sessionId ?? "");

@@ -12,6 +12,10 @@ import {
   CHAIN_CAST_RANGE,
   CHAIN_FALLOFF,
   CHAIN_JUMP_RANGE,
+  CHAIN_FORK_JUMPS,
+  CHAIN_FORK_STUN_MS,
+  RIFT_RADIUS,
+  RIFT_DURATION_MS,
   CLASSES,
   CLASS_ATTACKS,
   ClassName,
@@ -803,6 +807,15 @@ export class DungeonRoom extends Room<DungeonState> {
         p.gold += 5000;
         this.sendLoadout(client, p);
         client.send("smokegave", { id: it.id, name: it.name, rarity: it.rarity });
+      });
+      // Dev-only, self-only: grant a legendary skill-power directly (the gear→p.powers plumbing is
+      // already proven; this lets a probe exercise a skill handler's power branch without farming
+      // the exact epic). Cleared on the next recompute, which is fine for an immediate cast test.
+      this.onMessage("smokepower", (client: Client, msg: { id?: string }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p || !msg?.id) return;
+        p.powers.add(msg.id);
+        client.send("smokepowered", { id: msg.id });
       });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
@@ -3348,9 +3361,12 @@ export class DungeonRoom extends Room<DungeonState> {
             Math.hypot(a.m.x - msg.x, a.m.y - msg.y) - Math.hypot(b.m.x - msg.x, b.m.y - msg.y)
         );
 
+        // Stormfork: the bolt forks to more foes, and every strike stuns
+        const fork = p.powers.has("chain_fork");
+        const maxJumps = CHAIN_FALLOFF.length + (fork ? CHAIN_FORK_JUMPS : 0);
         const targets: Array<{ id: string; m: Monster }> = [];
         let cur = inCastRange[0];
-        while (cur && targets.length < CHAIN_FALLOFF.length) {
+        while (cur && targets.length < maxJumps) {
           targets.push(cur);
           const from = cur.m;
           cur = all
@@ -3375,7 +3391,11 @@ export class DungeonRoom extends Room<DungeonState> {
 
         targets.forEach(({ id }, i) => {
           const m = this.state.monsters.get(id);
-          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, CHAIN_FALLOFF[i] * mult), sessionId);
+          if (!m) return;
+          // extra fork jumps ride the weakest falloff step
+          const falloff = CHAIN_FALLOFF[Math.min(i, CHAIN_FALLOFF.length - 1)];
+          if (fork && !isBossKind(m.kind)) m.stunUntil = Math.max(m.stunUntil, now + CHAIN_FORK_STUN_MS);
+          this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, falloff * mult), sessionId);
         });
         break;
       }
@@ -3463,16 +3483,25 @@ export class DungeonRoom extends Room<DungeonState> {
       }
 
       case "teleport": {
+        const fromX = p.x;
+        const fromY = p.y;
         const dist = Math.min(len, TELEPORT_RANGE);
         let placed = false;
         for (const frac of [1, 0.75, 0.5, 0.25]) {
           const nx = p.x + dirX * dist * frac;
           const ny = p.y + dirY * dist * frac;
           if (canStand(this.map, nx, ny)) {
-            this.broadcast("teleportfx", { id: sessionId, fromX: p.x, fromY: p.y, toX: nx, toY: ny });
+            this.broadcast("teleportfx", { id: sessionId, fromX, fromY, toX: nx, toY: ny });
             p.x = p.targetX = nx;
             p.y = p.targetY = ny;
             placed = true;
+            // Riftwalk: tear a burning arcane rift at BOTH ends
+            if (p.powers.has("teleport_rift")) {
+              for (const [rx, ry] of [[fromX, fromY], [nx, ny]] as Array<[number, number]>) {
+                this.hazards.push({ ax: rx, ay: ry, bx: rx, by: ry, width: RIFT_RADIUS, until: now + RIFT_DURATION_MS, nextTick: now, owner: sessionId, mult });
+                this.broadcast("riftbloom", { x: rx, y: ry, r: RIFT_RADIUS, ms: RIFT_DURATION_MS });
+              }
+            }
             break;
           }
         }

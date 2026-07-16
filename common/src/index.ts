@@ -2166,6 +2166,11 @@ export const CHAIN_CAST_RANGE = 260;
 export const CHAIN_JUMP_RANGE = 110;
 export const CHAIN_FALLOFF = [1, 0.85, 0.7, 0.55];
 export const TELEPORT_RANGE = 220;
+// legendary-power tuning (Legendary Powers II)
+export const CHAIN_FORK_JUMPS = 2; // Stormfork: extra chain jumps
+export const CHAIN_FORK_STUN_MS = 700; // …and how long each struck foe is stunned
+export const RIFT_RADIUS = 56; // Riftwalk: the burning rift left at each teleport end
+export const RIFT_DURATION_MS = 2600;
 
 // --- items ---
 
@@ -2444,6 +2449,9 @@ export const SKILL_POWERS: Record<string, { skill: string; name: string; desc: s
   whirl_rend: { skill: "whirlwind", name: "Rending Storm", desc: "Whirlwind reaps a wider circle and leaves the ground burning." },
   multi_volley: { skill: "multishot", name: "Endless Quiver", desc: "Multishot looses a far wider volley." },
   twister_swarm: { skill: "twister", name: "Tempest", desc: "Twister splits into three blades of wind." },
+  // Legendary Powers II
+  chain_fork: { skill: "chain", name: "Stormfork", desc: "Chain Lightning forks to two more foes and stuns everything it strikes." },
+  teleport_rift: { skill: "teleport", name: "Riftwalk", desc: "Teleport tears a burning arcane rift at both ends that keeps searing for a few seconds." },
 };
 export const FROSTBITE_CHANCE = 0.08;
 export const KNOCKBACK_CHANCE = 0.15;
@@ -2714,6 +2722,8 @@ export const FIXED_ITEMS: Array<{ base: string; name: string; rarity: Rarity; st
 
   // ---- the build-DEFINING legends: each rewrites one class's signature skill ----
   { base: "warstaff", name: "Starfall", rarity: "epic", stats: { dmg: 8, fireDmg: 12, dmgPct: 22, maxMana: 30, plusSkills: 1 }, effect: "arcane_surge", power: "meteor_twice" },
+  { base: "orb", name: "The Tempest Coil", rarity: "epic", stats: { lightDmg: 16, dmgPct: 22, maxMana: 30, cdr: 8, plusSkills: 1 }, effect: "chain_on_kill", power: "chain_fork" },
+  { base: "warstaff", name: "Voidstride", rarity: "epic", stats: { dmg: 7, dmgPct: 20, maxMana: 30, moveSpd: 8, plusSkills: 1 }, effect: "arcane_surge", power: "teleport_rift" },
   { base: "scepter", name: "Auric Verdict", rarity: "epic", stats: { dmg: 9, dmgPct: 25, maxHp: 20, plusSkills: 1 }, effect: "patriarch", power: "hammer_twin" },
   { base: "wand", name: "The Bone Choir", rarity: "epic", stats: { dmg: 7, maxMana: 25, dmgPct: 20, plusSkills: 1 }, effect: "corpse_explosion", power: "bone_legion" },
   { base: "club", name: "Tempest's Kiss", rarity: "epic", stats: { dmg: 8, coldDmg: 8, moveSpd: 8, plusSkills: 1 }, effect: "knockback_shot", power: "twister_swarm" },
