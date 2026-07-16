@@ -190,6 +190,7 @@ export class GameScene extends Phaser.Scene {
   private moteCount = 0;
   private lastMoteAt = 0;
   private lightImg?: Phaser.GameObjects.Image;
+  private torchGlow?: Phaser.GameObjects.Image;
   private atmosphere?: Atmosphere;
   private lightScaleCur = 3;
   private stairsFx?: Phaser.GameObjects.Container;
@@ -267,12 +268,16 @@ export class GameScene extends Phaser.Scene {
   create() {
     ensureItemIcons(this);
     this.ensureLightTexture();
+    this.ensureTorchTexture();
     this.lightImg = this.add.image(0, 0, "lightmask").setDepth(849_000); // under the fog shroud, over the world
+    // warm firelight over the cold vision mask — breathes with the hero
+    this.torchGlow = this.add.image(0, 0, "torchglow").setDepth(849_500).setBlendMode(Phaser.BlendModes.ADD);
     this.scene.launch("ui");
     this.shiftKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT, false);
     this.input.keyboard?.on("keydown-L", () => {
       if (this.ui?.chatActive) return;
       if (this.lightImg) this.lightImg.setVisible(!this.lightImg.visible);
+      if (this.torchGlow) this.torchGlow.setVisible(this.lightImg?.visible ?? true);
     });
 
     // atmosphere: bloom + vignette + per-zone color wash & ambient motes
@@ -1674,6 +1679,23 @@ export class GameScene extends Phaser.Scene {
     cv.refresh();
   }
 
+  // a warm amber torch pool, added over the cold vision mask for firelit coziness
+  private ensureTorchTexture() {
+    if (this.textures.exists("torchglow")) return;
+    const size = 512;
+    const cv = this.textures.createCanvas("torchglow", size, size);
+    if (!cv) return;
+    const ctx = cv.getContext();
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 8, size / 2, size / 2, size * 0.5);
+    grad.addColorStop(0, "rgba(255,190,112,0.5)");
+    grad.addColorStop(0.35, "rgba(255,162,78,0.24)");
+    grad.addColorStop(0.7, "rgba(208,120,52,0.07)");
+    grad.addColorStop(1, "rgba(208,120,52,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    cv.refresh();
+  }
+
   private updateLight() {
     if (!this.lightImg?.visible || !this.room) return;
     const me = this.players.get(this.room.sessionId);
@@ -1692,6 +1714,13 @@ export class GameScene extends Phaser.Scene {
     this.lightScaleCur += (base * townMult * surfaceMult * depthMult - this.lightScaleCur) * 0.06;
     const flicker = 1 + 0.016 * Math.sin(this.time.now / 132) + 0.007 * Math.sin(this.time.now / 47);
     this.lightImg.setScale(this.lightScaleCur * flicker);
+
+    // the warm torch pool rides with the vision mask, breathing a touch more freely
+    if (this.torchGlow) {
+      this.torchGlow.setPosition(this.lightImg.x, this.lightImg.y);
+      const tFlicker = 1 + 0.05 * Math.sin(this.time.now / 90) + 0.03 * Math.sin(this.time.now / 37);
+      this.torchGlow.setScale(((cam.displayWidth * 0.34) / 512) * tFlicker);
+    }
   }
 
   // --- dungeon dressing ---
