@@ -1686,11 +1686,12 @@ export class GameScene extends Phaser.Scene {
     const cv = this.textures.createCanvas("torchglow", size, size);
     if (!cv) return;
     const ctx = cv.getContext();
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 8, size / 2, size / 2, size * 0.5);
-    grad.addColorStop(0, "rgba(255,190,112,0.5)");
-    grad.addColorStop(0.35, "rgba(255,162,78,0.24)");
-    grad.addColorStop(0.7, "rgba(208,120,52,0.07)");
-    grad.addColorStop(1, "rgba(208,120,52,0)");
+    // deliberately faint — additive glow centered on the hero blows him out fast
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 20, size / 2, size / 2, size * 0.5);
+    grad.addColorStop(0, "rgba(255,196,120,0.14)");
+    grad.addColorStop(0.4, "rgba(255,168,86,0.07)");
+    grad.addColorStop(0.75, "rgba(212,124,56,0.022)");
+    grad.addColorStop(1, "rgba(212,124,56,0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     cv.refresh();
