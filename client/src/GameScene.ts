@@ -2756,6 +2756,11 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     container.add([...parts]);
+    // magical interactables (portals, waypoint, altar, shrines) bleed their own
+    // light — a true per-object glow in their hue, not a flat colored disc
+    if (!isNpc && s.kind !== "chest" && s.kind !== "stash") {
+      container.postFX?.addGlow(accent, 2.6, 0, false, 0.08, 14);
+    }
     label.setPosition(container.x, container.y - 46).setDepth(885_000);
 
     for (const obj of [clickable, label]) {
@@ -3168,7 +3173,8 @@ export class GameScene extends Phaser.Scene {
     if (isBig) {
       const beamOuter = this.add.rectangle(0, -54, 13, 104, color, 0.16).setOrigin(0.5, 0.5);
       const beamInner = this.add.rectangle(0, -54, 5, 104, color, 0.45).setOrigin(0.5, 0.5);
-      const beamCore = this.add.rectangle(0, -54, 1.6, 104, 0xffffff, 0.55).setOrigin(0.5, 0.5); // a bright core for bloom to catch
+      const beamCore = this.add.rectangle(0, -54, 1.6, 104, 0xffffff, 0.55).setOrigin(0.5, 0.5); // bright core
+      beamInner.preFX?.addGlow(color, 3, 0, false, 0.1, 10); // the beam bleeds its rarity's light
       container.add([beamOuter, beamInner, beamCore]);
       this.tweens.add({ targets: [beamOuter, beamInner, beamCore], alpha: 0.6, duration: 700, yoyo: true, repeat: -1 });
     }
