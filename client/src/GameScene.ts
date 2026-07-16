@@ -269,6 +269,7 @@ export class GameScene extends Phaser.Scene {
     ensureItemIcons(this);
     this.ensureLightTexture();
     this.ensureTorchTexture();
+    this.ensureGlowDot();
     this.lightImg = this.add.image(0, 0, "lightmask").setDepth(849_000); // under the fog shroud, over the world
     // warm firelight over the cold vision mask — breathes with the hero
     this.torchGlow = this.add.image(0, 0, "torchglow").setDepth(849_500).setBlendMode(Phaser.BlendModes.ADD);
@@ -3477,6 +3478,8 @@ export class GameScene extends Phaser.Scene {
     if (msg.crit && msg.t === "m") {
       // critical strike — big, gold, unmissable, and it grows with the number
       const s = worldToScreen(msg.x, msg.y);
+      this.combatFlash(s.x, s.y, 0xffdf80, 84); // a golden spark of light on the crunch
+
       const big = Math.min(30, 18 + Math.floor(msg.amount / 40));
       const t = this.add
         .text(s.x + (Math.random() * 2 - 1) * 10, s.y - 40, `${msg.amount}!`, {
@@ -3595,8 +3598,42 @@ export class GameScene extends Phaser.Scene {
     this.sfx.swing();
   }
 
+  // a soft white radial we can tint any color for combat light
+  private ensureGlowDot() {
+    if (this.textures.exists("glowdot")) return;
+    const size = 128;
+    const cv = this.textures.createCanvas("glowdot", size, size);
+    if (!cv) return;
+    const ctx = cv.getContext();
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.4, "rgba(255,255,255,0.5)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    cv.refresh();
+  }
+
+  // a brief pool of colored light — spells and crits throw light on the dark ground
+  private combatFlash(sx: number, sy: number, color: number, size = 90) {
+    const light = this.add
+      .image(sx, sy - 8, "glowdot")
+      .setTint(color)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(sy + 3)
+      .setScale((size / 128) * 0.5)
+      .setAlpha(0.8);
+    this.tweens.add({
+      targets: light, scale: (size / 128) * 1.3, alpha: 0, duration: 240, ease: "quad.out",
+      onComplete: () => light.destroy(),
+    });
+  }
+
   private onImpact(msg: { kind: string; x: number; y: number }) {
     const s = worldToScreen(msg.x, msg.y);
+    // every impact throws a brief pool of its element's light
+    const lightColor = msg.kind === "fireball" ? 0xff8848 : PROJ_TRAIL[msg.kind] ?? 0xd0d0d8;
+    this.combatFlash(s.x, s.y, lightColor, msg.kind === "fireball" ? 140 : 74);
     if (msg.kind === "fireball") {
       const blast = this.add.circle(s.x, s.y - 10, 22, 0xff8844, 0.7).setDepth(s.y + 2).setScale(0.3);
       this.tweens.add({ targets: blast, scale: 1.7, alpha: 0, duration: 260, onComplete: () => blast.destroy() });
