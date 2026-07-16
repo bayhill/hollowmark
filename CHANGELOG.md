@@ -652,3 +652,13 @@ Live testing surfaced a nasty compounding bug: descending stairs in a Rift dumpe
 - **Always an exit.** A Rift now always carries an "Abandon the Rift" portal on its safe town strip (reachable by town portal or on respawn), so you can bail to town even mid-run — you can never be trapped.
 
 Typecheck (×3) + full `npm run smoke` green.
+
+## Enemy variety, slice 1 — behavioral champion packs (fighting deep-content monotony)
+
+The Abyss (and every deep floor) scaled only by HP and damage — the flagged "deep-content monotony." Champion packs had eight modifiers, but five were pure stat multipliers and three were elemental; none changed *how* you fought. This slice opens a new axis: **behavioral pack affixes** that change the verb of combat, not the numbers. Two land here as an end-to-end vertical slice, with the plumbing for the rest (Mortar, Warded, Teleporting, Vortex — the telegraph-based ones) proven and ready.
+
+- **Vampiric** (red pack) — heals itself for **half of every blow it lands on you**. Ignore it and it never dies; burst it down or peel off its target. A green life-drain mote rises off it each time it drinks, so you can read what's happening.
+- **Spiked** (orange pack) — throws **15% of every blow you land right back at you**. Big single hits punish; chip damage is safe. The reflect is gated so it can never cascade off its own DoTs or splash.
+- Champion auras now tint to their modifier (Vampiric bleeds red, Spiked burns orange) instead of the flat champion blue — the color is a warning you can read across the room, same as the name label.
+- **Verification.** New dev-only, production-gated test hooks (`smokespawnchamp` / `smokeclear`) let a probe force a champion of a named modifier and reset between runs, so behavioral affixes — a ~20% random roll otherwise — can be checked deterministically. `scratchpad/champ-affix-probe.ts` proves both against a live server: Vampiric wounded-then-climbs while the hero holds fire; Spiked costs the hero real hp over a fixed swing routine where a no-reflect control costs zero (clean isolation — the hero attacks from outside the pack's own strike range). Typecheck (×3), client production build, and full `npm run smoke` all green.
+- **Also fixed here:** the smoke suite had been red since the Q/E/F→1/2/3 hotkey migration — it still asserted skills auto-bind to `Q`. Updated the skill-bind, cast, rebind round-trip, and persistence checks to the numeric slots; the full suite passes again.

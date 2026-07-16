@@ -1791,6 +1791,10 @@ export interface ChampionMod {
   alpha?: number; // ghostly packs render translucent
   element?: Element; // enchanted packs deal typed damage
   explode?: boolean; // Fire Enchanted: dies violently
+  // behavioral mods — these change how you FIGHT the pack, not just its numbers
+  vampiric?: boolean; // heals itself for a slice of every blow it lands — burst it down
+  reflect?: number; // throws this fraction of each melee blow back at the attacker
+  aura?: number; // client aura tint (defaults to champion blue when absent)
 }
 
 export const CHAMPION_MODS: ChampionMod[] = [
@@ -1803,10 +1807,14 @@ export const CHAMPION_MODS: ChampionMod[] = [
   { id: "fire", label: "Fire Enchanted", hpMult: 1.4, dmgMult: 1.2, speedMult: 1, cdMult: 1, element: "fire", explode: true },
   { id: "cold", label: "Cold Enchanted", hpMult: 1.3, dmgMult: 1.1, speedMult: 0.95, cdMult: 1, element: "cold" },
   { id: "light", label: "Lightning Enchanted", hpMult: 1.2, dmgMult: 1.3, speedMult: 1.05, cdMult: 0.85, element: "light" },
+  // behavioral packs — the label warns you, the fight plays differently
+  { id: "vampiric", label: "Vampiric", hpMult: 1.4, dmgMult: 1.1, speedMult: 1, cdMult: 1, vampiric: true, aura: 0xc0303a },
+  { id: "spiked", label: "Spiked", hpMult: 1.6, dmgMult: 1, speedMult: 0.95, cdMult: 1, reflect: 0.15, aura: 0xe0872a },
 ];
 
 export const FE_EXPLODE_RADIUS = 75;
 export const FE_EXPLODE_MULT = 1.5; // × the champion's own damage
+export const VAMPIRIC_HEAL_FRAC = 0.5; // a Vampiric blow heals it for half of what it deals
 
 export const CHAMPION_XP_MULT = 2;
 export const CHAMPION_EXTRA_DROP = 0.3;

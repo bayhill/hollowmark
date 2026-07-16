@@ -768,6 +768,22 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: ring, scale: 1.1, alpha: 0, duration: 450, onComplete: () => ring.destroy() });
         this.sfx.ice();
       });
+      room.onMessage("mheal", (msg: any) => {
+        // a Vampiric pack drinks the wound — a brief green upward drain
+        const s = worldToScreen(msg.x, msg.y);
+        for (let i = 0; i < 3; i++) {
+          const mote = this.add
+            .circle(s.x + (Math.random() - 0.5) * 14, s.y, 2.5, 0x7ad66a, 0.9)
+            .setDepth(s.y + 3);
+          this.tweens.add({
+            targets: mote,
+            y: s.y - 20 - Math.random() * 10,
+            alpha: 0,
+            duration: 380 + Math.random() * 160,
+            onComplete: () => mote.destroy(),
+          });
+        }
+      });
       room.onMessage("dashfx", (msg: any) => this.onDashFx(msg));
       room.onMessage("socketed", (msg: any) => {
         const me = this.players.get(this.room?.sessionId ?? "");
@@ -3000,7 +3016,8 @@ export class GameScene extends Phaser.Scene {
 
     const isChampion = !!monster.modifier && !monster.elite;
     if (monster.elite || isChampion) {
-      const auraColor = monster.elite ? 0xffd54a : 0x6a8cff;
+      const champMod = CHAMPION_MODS.find((c) => c.id === monster.modifier);
+      const auraColor = monster.elite ? 0xffd54a : champMod?.aura ?? 0x6a8cff;
       const aura = this.add.circle(0, -def.radius - 2, def.radius + 4, auraColor, 0);
       aura.setStrokeStyle(2, auraColor, 0.85);
       container.add(aura);

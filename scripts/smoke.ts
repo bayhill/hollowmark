@@ -329,49 +329,49 @@ async function main() {
   }
   console.log(`character creation works: Smokey the barbarian (STR ${me().str} DEX ${me().dex} VIT ${me().vit} ENE ${me().ene})`);
 
-  // --- skill tree: level 1 hero has 1 point; Q does nothing until a skill is learned ---
+  // --- skill tree: level 1 hero has 1 point; slot 1 does nothing until a skill is learned ---
   if (me().skillPoints !== 1) throw new Error(`level-1 hero should have 1 skill point, has ${me().skillPoints}`);
   const manaIdle = me().mana;
-  r1.send("skill", { key: "Q", x: me().x + 10, y: me().y });
+  r1.send("skill", { key: "1", x: me().x + 10, y: me().y });
   await sleep(400);
-  if (me().mana < manaIdle - 1) throw new Error("unbound Q consumed mana before any skill was learned");
+  if (me().mana < manaIdle - 1) throw new Error("unbound slot 1 consumed mana before any skill was learned");
 
   // ultimates and deep tiers must be rejected at level 1
   r1.send("allocskill", { id: "ancients" });
   await sleep(300);
   if ((lastLoadout?.skills?.ancients ?? 0) > 0) throw new Error("level-1 hero allocated an ultimate");
 
-  // learn Battle Shout — auto-binds to Q
+  // learn Battle Shout — auto-binds to the first free slot (1)
   r1.send("allocskill", { id: "shout" });
   await sleep(400);
   if (me().skillPoints !== 0) throw new Error("allocskill did not spend the point");
   if ((lastLoadout?.skills?.shout ?? 0) !== 1) throw new Error("shout not learned");
-  if (lastLoadout?.binds?.Q !== "shout") throw new Error(`shout did not auto-bind to Q (binds: ${JSON.stringify(lastLoadout?.binds)})`);
-  console.log("skill tree works: ultimate rejected at lvl 1, Battle Shout learned + auto-bound to Q");
+  if (lastLoadout?.binds?.["1"] !== "shout") throw new Error(`shout did not auto-bind to slot 1 (binds: ${JSON.stringify(lastLoadout?.binds)})`);
+  console.log("skill tree works: ultimate rejected at lvl 1, Battle Shout learned + auto-bound to slot 1");
 
   // --- skills: casting the learned skill consumes mana ---
   const manaBefore = me().mana;
-  r1.send("skill", { key: "Q", x: me().x + 10, y: me().y });
+  r1.send("skill", { key: "1", x: me().x + 10, y: me().y });
   await sleep(500);
   if (me().mana >= manaBefore) throw new Error("bound skill consumed no mana");
   console.log(`skills work: mana ${manaBefore.toFixed(0)} -> ${me().mana.toFixed(0)}`);
 
-  // F is unbound — must consume nothing
+  // slot 6 is unbound — must consume nothing
   const manaAfterWW = me().mana;
-  r1.send("skill", { key: "F", x: me().x + 10, y: me().y });
+  r1.send("skill", { key: "6", x: me().x + 10, y: me().y });
   await sleep(500);
-  if (me().mana < manaAfterWW - 1) throw new Error("unbound F skill consumed mana");
+  if (me().mana < manaAfterWW - 1) throw new Error("unbound slot 6 consumed mana");
   console.log("binding gating works: unbound key does nothing");
 
-  // rebind shout to E, then back — bindskill round trip
-  r1.send("bindskill", { id: "shout", key: "E" });
+  // rebind shout to slot 2, then back — bindskill round trip
+  r1.send("bindskill", { id: "shout", key: "2" });
   await sleep(300);
-  if (lastLoadout?.binds?.E !== "shout" || lastLoadout?.binds?.Q) {
+  if (lastLoadout?.binds?.["2"] !== "shout" || lastLoadout?.binds?.["1"]) {
     throw new Error(`rebind failed (binds: ${JSON.stringify(lastLoadout?.binds)})`);
   }
-  r1.send("bindskill", { id: "shout", key: "Q" });
+  r1.send("bindskill", { id: "shout", key: "1" });
   await sleep(300);
-  console.log("bindskill works: Q -> E -> Q round trip");
+  console.log("bindskill works: 1 -> 2 -> 1 round trip");
 
   // --- a necromancer joins and raises the dead (new class + pet system e2e) ---
   {
@@ -384,7 +384,7 @@ async function main() {
     if (!np || np.cls !== "necromancer") throw new Error("necromancer did not join");
     rN.send("allocskill", { id: "skeleton" });
     await sleep(400);
-    rN.send("skill", { key: "Q", x: np.x + 20, y: np.y });
+    rN.send("skill", { key: "1", x: np.x + 20, y: np.y });
     await sleep(600);
     if (state().pets.size < 1) throw new Error("Raise Skeleton raised nothing");
     console.log(`necromancer works: Boney joined and raised ${state().pets.size} skeleton(s) from the floor`);
@@ -1955,7 +1955,7 @@ async function main() {
     vit: me().vit,
     statPoints: me().statPoints,
     shoutRank: lastLoadout?.skills?.shout ?? 0,
-    bindQ: lastLoadout?.binds?.Q ?? "",
+    bind1: lastLoadout?.binds?.["1"] ?? "",
   };
   await r1.leave();
   await sleep(500);
@@ -1996,10 +1996,10 @@ async function main() {
   if ((reload?.skills?.shout ?? 0) !== snapshot.shoutRank) {
     throw new Error(`skills not persisted: shout ${reload?.skills?.shout} != ${snapshot.shoutRank}`);
   }
-  if ((reload?.binds?.Q ?? "") !== snapshot.bindQ) throw new Error(`bindings not persisted`);
+  if ((reload?.binds?.["1"] ?? "") !== snapshot.bind1) throw new Error(`bindings not persisted`);
   if (revived.deepestFloor !== 2) throw new Error(`deepestFloor not persisted: ${revived.deepestFloor}`);
   console.log(
-    `persistence works: ${snapshot.name} the ${snapshot.cls} lvl ${snapshot.level} (VIT ${snapshot.vit}, shout rank ${snapshot.shoutRank}, Q bound, waypoint floor ${revived.deepestFloor}) survived a full reconnect into a new room`
+    `persistence works: ${snapshot.name} the ${snapshot.cls} lvl ${snapshot.level} (VIT ${snapshot.vit}, shout rank ${snapshot.shoutRank}, slot 1 bound, waypoint floor ${revived.deepestFloor}) survived a full reconnect into a new room`
   );
 
   // --- the veteran returns: town start, network intact, gates still gated ---

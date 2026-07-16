@@ -75,6 +75,7 @@ import {
   VICTORY_ACT,
   FE_EXPLODE_RADIUS,
   FE_EXPLODE_MULT,
+  VAMPIRIC_HEAL_FRAC,
   MANA_POTION_DROP_CHANCE,
   MANA_POTION_RESTORE_FRACTION,
   BOSS_MANA_POTION_DROPS,
@@ -728,6 +729,39 @@ export class DungeonRoom extends Room<DungeonState> {
         });
         // more than enough to punch past armor; loop guards the vanishing dodge chance
         for (let i = 0; i < 12 && p.hp > 0; i++) this.damagePlayer(client.sessionId, p, p.maxHp * 10, by);
+      });
+      // Dev-only: drop a lone champion of a named modifier beside the caller, so the smoke
+      // suite can exercise behavioral pack affixes deterministically (they're a ~20% random roll
+      // otherwise). Returns the mob's id so the probe can watch it heal / reflect.
+      this.onMessage("smokespawnchamp", (client: Client, msg: { modifier?: string; hp?: number }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        const champion = CHAMPION_MODS.find((c) => c.id === msg?.modifier);
+        if (!champion) return;
+        const m = new Monster();
+        const kind: MonsterKind = "zombie"; // a plain melee body so behavior is unambiguous
+        const def = MONSTERS[kind];
+        m.kind = kind;
+        const pos = this.scatter(p.x, p.y, 40);
+        m.x = pos.x;
+        m.y = pos.y;
+        m.hp = m.maxHp = Math.round((msg?.hp && msg.hp > 0 ? msg.hp : def.maxHp) * champion.hpMult);
+        m.modifier = champion.id;
+        m.name = `${champion.label} ${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+        m.dmgMult = champion.dmgMult;
+        m.speedMult = champion.speedMult;
+        m.cdMult = champion.cdMult;
+        m.xpMult = CHAMPION_XP_MULT;
+        m.element = champion.element ?? "";
+        m.explodeOnDeath = !!champion.explode;
+        m.camp = -3; // belongs to no camp — never respawns
+        const id = `champ_${this.nextId++}`;
+        this.state.monsters.set(id, m);
+        client.send("smokechamp", { id });
+      });
+      // Dev-only: remove a specific spawned monster (so an affix probe can reset between runs).
+      this.onMessage("smokeclear", (_client: Client, msg: { id?: string }) => {
+        if (msg?.id) this.state.monsters.delete(msg.id);
       });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
@@ -3399,6 +3433,15 @@ export class DungeonRoom extends Room<DungeonState> {
     m.hp -= amount;
     this.broadcast("hit", { t: "m", id, amount, x: m.x, y: m.y, crit: attacker?.lastCrit ?? false, by: attackerId, kill: m.hp <= 0, resisted });
 
+    // Spiked packs throw part of the blow back — big hits punish you, chip damage is safe.
+    // gated on allowProcs so reflected/DoT/splash damage can't cascade into a loop.
+    if (attacker && allowProcs && m.modifier) {
+      const mod = CHAMPION_MODS.find((c) => c.id === m.modifier);
+      if (mod?.reflect) {
+        this.damagePlayer(attackerId, attacker, Math.max(1, Math.round(amount * mod.reflect)), `${m.name || this.monsterLabel(m)}'s spikes`);
+      }
+    }
+
     if (attacker && allowProcs) {
       const d = attacker.derived;
       // cold chills, leeches leech
@@ -5119,11 +5162,12 @@ export class DungeonRoom extends Room<DungeonState> {
         if (now - m.lastAttack >= def.cooldownMs * m.cdMult) {
           m.lastAttack = now;
           this.broadcast("mswing", { id, tx: foe.x, ty: foe.y }); // the lunge, for the eyes
+          const dealt = this.monsterDamage(m);
           if (targetIsMerc) {
-            this.damageMerc(targetId, foe as Merc, this.monsterDamage(m), this.monsterLabel(m));
+            this.damageMerc(targetId, foe as Merc, dealt, this.monsterLabel(m));
           } else {
             const t = foe as Player;
-            this.damagePlayer(targetId, t, this.monsterDamage(m), this.monsterLabel(m), (m.element || MONSTER_ELEMENTS[m.kind]) as Element | undefined);
+            this.damagePlayer(targetId, t, dealt, this.monsterLabel(m), (m.element || MONSTER_ELEMENTS[m.kind]) as Element | undefined);
             // thorns bite back at melee attackers
             if ((t.derived.thorns ?? 0) > 0 && this.state.monsters.get(id)) {
               this.damageMonster(id, m, t.derived.thorns!, targetId, false);
@@ -5131,6 +5175,14 @@ export class DungeonRoom extends Room<DungeonState> {
             // Frostplate: touching this one costs you your speed
             if (t.effects.has("frost_armor")) {
               m.slowUntil = Math.max(m.slowUntil, now + 1800);
+            }
+          }
+          // Vampiric packs drink from the wound — the blow it just landed knits it back together
+          if (m.modifier === "vampiric" && m.hp > 0 && m.hp < m.maxHp) {
+            const healed = Math.min(m.maxHp, m.hp + dealt * VAMPIRIC_HEAL_FRAC);
+            if (healed > m.hp) {
+              m.hp = healed;
+              this.broadcast("mheal", { id, x: m.x, y: m.y });
             }
           }
         }
