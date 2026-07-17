@@ -11,6 +11,12 @@ const port = Number(process.env.PORT || 2567);
 // the hero-select screen asks /heroes who its keys belong to
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
+  if (req.url === "/health") {
+    // liveness probe for the host (Fly/Railway/Render/etc.) — cheap and dependency-free
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, season: CURRENT_SEASON }));
+    return;
+  }
   if (req.url?.startsWith("/heroes")) {
     const url = new URL(req.url, `http://localhost:${port}`);
     const keys = (url.searchParams.get("keys") ?? "").split(",").filter(validKey).slice(0, 20);

@@ -1,0 +1,55 @@
+# Fly.io config for the Hollowmark game server (Colyseus).
+# The client is hosted separately on Vercel — this deploys ONLY the server.
+#
+# One-time setup and deploy steps live in DEPLOY.md. The short version:
+#   fly launch --no-deploy   (or `fly apps create hollowmark-server`)
+#   fly volumes create hollowmark_data --size 1 --region arn
+#   fly deploy
+#
+# Cost shape: the machine auto-stops when idle (min_machines_running = 0), so you
+# pay ~nothing while nobody is playing — only the 1 GB volume (~$0.15/mo) and the
+# seconds the VM is actually serving. Trade-off: a ~2-4s cold start on the first
+# connection after an idle period.
+
+app = "hollowmark-server"
+primary_region = "arn" # Stockholm — change to your nearest region (`fly platform regions`)
+
+[build]
+  dockerfile = "Dockerfile"
+
+# NODE_ENV / ARPG_PROD / ARPG_DATA_DIR are baked into the Dockerfile; PORT here
+# just documents the contract and keeps it overridable.
+[env]
+  PORT = "2567"
+
+[http_service]
+  internal_port = 2567
+  force_https = true          # clients must reach us over https/wss
+  auto_stop_machines = "stop"  # sleep when idle...
+  auto_start_machines = true   # ...wake on the next connection
+  min_machines_running = 0     # 0 = truly idle-to-zero (near-free hobby mode)
+
+  # A dungeon session is one long-lived WebSocket. Cap concurrent connections so
+  # a single small VM isn't oversubscribed; raise if you scale up the VM.
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+
+  # Liveness probe — hits the dependency-free /health route added to the server.
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+# Player profiles/accounts persist here, surviving deploys and machine restarts.
+# persistence.ts writes /data/profiles and /data/accounts (via ARPG_DATA_DIR).
+[mounts]
+  source = "hollowmark_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb" # bump to 512mb if rooms get heavy or you host many parties
