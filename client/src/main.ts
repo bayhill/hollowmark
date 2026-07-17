@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GameScene } from "./GameScene";
 import { UIScene } from "./UIScene";
+import { SERVER_HTTP } from "./config";
 
 // --- character creation: shown once, before the descent begins ---
 
@@ -187,7 +188,7 @@ function showLobby(): Promise<{ mode: "create"; difficulty: number } | { mode: "
     const clsCol: Record<string, string> = { barbarian: "#e07a6a", rogue: "#7fdc9f", sorcerer: "#7aa8e8", paladin: "#e8cf7a", necromancer: "#9fceb4", druid: "#cf9a5f" };
     const refreshHall = async () => {
       try {
-        const res = await fetch(`http://${location.hostname}:2567/legends`);
+        const res = await fetch(`${SERVER_HTTP}/legends`);
         const legends: any[] = await res.json();
         hallList.innerHTML = "";
         if (!legends.length) {
@@ -251,7 +252,7 @@ function showLobby(): Promise<{ mode: "create"; difficulty: number } | { mode: "
     const refresh = async () => {
       let rooms: Array<{ roomId: string; clients: number; maxClients: number; metadata?: any }> = [];
       try {
-        const res = await fetch(`http://${location.hostname}:2567/rooms`);
+        const res = await fetch(`${SERVER_HTTP}/rooms`);
         rooms = await res.json();
       } catch {
         /* server napping — the list just stays empty */
@@ -383,7 +384,7 @@ function showHeroSelect(
     let details: any[] = [];
     if (roster.length) {
       try {
-        const res = await fetch(`http://${location.hostname}:2567/heroes?keys=${roster.map((e) => e.key).join(",")}`);
+        const res = await fetch(`${SERVER_HTTP}/heroes?keys=${roster.map((e) => e.key).join(",")}`);
         details = await res.json();
       } catch { /* offline — local names only */ }
     }

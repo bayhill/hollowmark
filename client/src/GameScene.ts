@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { Atmosphere } from "./atmosphere";
+import { SERVER_WS } from "./config";
 import {
   TILE,
   TILE_W,
@@ -41,6 +42,7 @@ import type { TownBuilding, TownStyle } from "@hollowmark/common";
 import { Sfx } from "./sfx";
 import { ensureItemIcons } from "./icons";
 import { buildMonsterFigure } from "./mobArt";
+import { generateThemeTextures } from "./materials";
 import { rarityColorStr, Loadout } from "./ui";
 import type { UIScene } from "./UIScene";
 
@@ -402,7 +404,7 @@ export class GameScene extends Phaser.Scene {
         created = JSON.parse(localStorage.getItem("arpg_new") ?? "{}");
       } catch { /* stale value — ignore */ }
 
-      const client = new Client(`ws://${location.hostname}:2567`);
+      const client = new Client(SERVER_WS);
       const randomize = localStorage.getItem("arpg_random") === "1";
       const intent = (window as any).__arpgIntent as { mode: string; roomId?: string; difficulty?: number } | undefined;
       const options = {
@@ -1543,7 +1545,7 @@ export class GameScene extends Phaser.Scene {
     } catch (err) {
       console.error("[client] connection failed", err);
       document.getElementById("arpg-loading")?.remove();
-      this.connectionStatus = "connection failed — is the server running on :2567?";
+      this.connectionStatus = `connection failed — is the server reachable at ${SERVER_WS}?`;
     }
   }
 
@@ -4545,76 +4547,7 @@ export class GameScene extends Phaser.Scene {
   private ensureThemeTextures(themeIdx: number) {
     if (this.themesGenerated.has(themeIdx)) return;
     this.themesGenerated.add(themeIdx);
-    const t = FLOOR_THEMES[themeIdx];
-    const g = this.add.graphics();
-
-    const floors: Array<[string, number]> = [
-      [`floor0_t${themeIdx}`, t.floorA],
-      [`floor1_t${themeIdx}`, t.floorB],
-    ];
-    for (const [key, fill] of floors) {
-      g.clear();
-      g.fillStyle(fill);
-      g.lineStyle(1, t.stroke);
-      g.beginPath();
-      g.moveTo(HALF_W, 0);
-      g.lineTo(TILE_W, HALF_H);
-      g.lineTo(HALF_W, TILE_H);
-      g.lineTo(0, HALF_H);
-      g.closePath();
-      g.fillPath();
-      g.strokePath();
-      g.generateTexture(key, TILE_W, TILE_H);
-    }
-
-    g.clear();
-    g.fillStyle(t.wallLeft);
-    g.beginPath();
-    g.moveTo(0, HALF_H);
-    g.lineTo(HALF_W, TILE_H);
-    g.lineTo(HALF_W, TILE_H + WALL_H);
-    g.lineTo(0, HALF_H + WALL_H);
-    g.closePath();
-    g.fillPath();
-
-    g.fillStyle(t.wallRight);
-    g.beginPath();
-    g.moveTo(TILE_W, HALF_H);
-    g.lineTo(HALF_W, TILE_H);
-    g.lineTo(HALF_W, TILE_H + WALL_H);
-    g.lineTo(TILE_W, HALF_H + WALL_H);
-    g.closePath();
-    g.fillPath();
-
-    // brick mortar lines following each face's slope, plus staggered joints
-    g.lineStyle(1, t.stroke, 0.55);
-    for (const k of [9, 18]) {
-      g.lineBetween(0, HALF_H + k, HALF_W, TILE_H + k); // left face course
-      g.lineBetween(TILE_W, HALF_H + k, HALF_W, TILE_H + k); // right face course
-    }
-    g.lineStyle(1, t.stroke, 0.4);
-    g.lineBetween(11, HALF_H + 5.5 + 9, 11, HALF_H + 5.5 + 18); // left joints
-    g.lineBetween(22, HALF_H + 11 + 0, 22, HALF_H + 11 + 9);
-    g.lineBetween(TILE_W - 11, HALF_H + 5.5 + 9, TILE_W - 11, HALF_H + 5.5 + 18);
-    g.lineBetween(TILE_W - 22, HALF_H + 11 + 0, TILE_W - 22, HALF_H + 11 + 9);
-
-    g.fillStyle(t.wallTop);
-    g.lineStyle(1, t.stroke);
-    g.beginPath();
-    g.moveTo(HALF_W, 0);
-    g.lineTo(TILE_W, HALF_H);
-    g.lineTo(HALF_W, TILE_H);
-    g.lineTo(0, HALF_H);
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
-    // weathering on the top surface
-    g.fillStyle(t.stroke, 0.5);
-    g.fillCircle(HALF_W - 8, HALF_H - 3, 1.2);
-    g.fillCircle(HALF_W + 6, HALF_H + 2, 1);
-    g.fillCircle(HALF_W + 1, HALF_H - 7, 0.9);
-    g.generateTexture(`wall_t${themeIdx}`, TILE_W, TILE_H + WALL_H);
-
-    g.destroy();
+    // procedural stone/earth materials: mottled, cracked, brick-coursed, base-shadowed (materials.ts)
+    generateThemeTextures(this, themeIdx, FLOOR_THEMES[themeIdx]);
   }
 }
