@@ -1879,7 +1879,10 @@ async function main() {
       if (ultimates.length !== 1) throw new Error(`${cls} should have exactly 1 ultimate, has ${ultimates.length}`);
       for (const n of nodes) {
         if (n.req && !ids.has(n.req)) throw new Error(`${cls}/${n.id} requires unknown skill ${n.req}`);
-        if (n.synergy && !ids.has(n.synergy.from)) throw new Error(`${cls}/${n.id} synergizes with unknown skill ${n.synergy.from}`);
+        for (const s of n.synergies ?? []) {
+          if (!ids.has(s.from)) throw new Error(`${cls}/${n.id} synergizes with unknown skill ${s.from}`);
+          if (s.from === n.id) throw new Error(`${cls}/${n.id} synergizes with itself`);
+        }
         if (n.type !== "passive" && (n.mana === undefined || n.cooldownMs === undefined)) {
           throw new Error(`${cls}/${n.id} is an active without mana/cooldown`);
         }
@@ -1901,6 +1904,10 @@ async function main() {
       if (canAllocSkill(t1, {}, 1, 0)) throw new Error(`${cls} skill allocatable with 0 points`);
       if (canAllocSkill(t1, { [t1.id]: t1.maxRank }, 99, 5)) throw new Error(`${cls} skill allocatable past max rank`);
     }
+    // synergy web: multiple sources stack multiplicatively (each is +pct/point over base)
+    const webNode: any = { id: "probe", type: "active", baseMult: 1, rankMult: 0, synergies: [{ from: "a", pct: 10 }, { from: "b", pct: 10 }] };
+    const webMult = skillDamageMult(webNode, { probe: 1, a: 2, b: 3 });
+    if (Math.abs(webMult - 1.2 * 1.3) > 1e-9) throw new Error(`multi-source synergy stacking wrong: got ${webMult}, expected ${1.2 * 1.3}`);
     // the level-99 endgame: every class can sink all 99 points somewhere
     for (const [cls, nodes] of Object.entries(SKILL_TREES)) {
       const cap = nodes.reduce((s, n) => s + n.maxRank, 0);

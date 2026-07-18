@@ -1970,7 +1970,7 @@ export interface SkillNode {
   cooldownMs?: number;
   baseMult?: number; // damage multiplier at rank 1
   rankMult?: number; // added multiplier per rank past 1
-  synergy?: { from: string; pct: number }; // +pct% damage per hard point in `from`
+  synergies?: Array<{ from: string; pct: number }>; // each source adds +pct% damage per hard point in `from` — a web, not a chain
   // passives grant stats per rank
   passive?: ItemStats;
   // a class KEYSTONE: a single-rank Transcendence capstone whose effect is a transformative RULE
@@ -1983,13 +1983,13 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
   barbarian: [
     { id: "bash", name: "Bash", desc: "A crushing blow that stuns its victim", tree: "Might", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 1500, baseMult: 1.6, rankMult: 0.25 },
     { id: "ironskin", name: "Iron Skin", desc: "Hardened hide and harder bones", tree: "Might", tier: 1, type: "passive", maxRank: 10, passive: { armor: 3, maxHp: 8 } },
-    { id: "whirlwind", name: "Whirlwind", desc: "Become a steel hurricane", tree: "Might", tier: 2, type: "active", maxRank: 5, req: "bash", mana: 12, cooldownMs: 3000, baseMult: 1.5, rankMult: 0.2, synergy: { from: "bash", pct: 8 } },
+    { id: "whirlwind", name: "Whirlwind", desc: "Become a steel hurricane", tree: "Might", tier: 2, type: "active", maxRank: 5, req: "bash", mana: 12, cooldownMs: 3000, baseMult: 1.5, rankMult: 0.2, synergies: [{ from: "bash", pct: 8 }] },
     { id: "mastery", name: "Weapon Mastery", desc: "Every weapon is an old friend", tree: "Might", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 6, crit: 1 } },
-    { id: "leap", name: "Leap Slam", desc: "Death from above, scattering the pack", tree: "Might", tier: 3, type: "active", maxRank: 5, req: "whirlwind", mana: 15, cooldownMs: 5000, baseMult: 1.2, rankMult: 0.2, synergy: { from: "whirlwind", pct: 6 } },
-    { id: "ancients", name: "Wrath of the Mountain", desc: "The mountain itself strikes with you", tree: "Might", tier: 4, type: "ultimate", maxRank: 5, req: "leap", mana: 30, cooldownMs: 25000, baseMult: 3.0, rankMult: 0.5, synergy: { from: "leap", pct: 10 } },
+    { id: "leap", name: "Leap Slam", desc: "Death from above, scattering the pack", tree: "Might", tier: 3, type: "active", maxRank: 5, req: "whirlwind", mana: 15, cooldownMs: 5000, baseMult: 1.2, rankMult: 0.2, synergies: [{ from: "whirlwind", pct: 6 }] },
+    { id: "ancients", name: "Wrath of the Mountain", desc: "The mountain itself strikes with you", tree: "Might", tier: 4, type: "ultimate", maxRank: 5, req: "leap", mana: 30, cooldownMs: 25000, baseMult: 3.0, rankMult: 0.5, synergies: [{ from: "leap", pct: 10 }] },
     { id: "shout", name: "Battle Shout", desc: "A roar that turns men into weapons", tree: "War Cries", tier: 1, type: "active", maxRank: 5, mana: 10, cooldownMs: 10000 },
     { id: "frenzy", name: "Frenzy", desc: "Blood sings; hands blur", tree: "War Cries", tier: 2, type: "passive", maxRank: 10, passive: { atkSpd: 4, moveSpd: 2 } },
-    { id: "warcry", name: "War Cry", desc: "A concussive bellow that staggers the horde", tree: "War Cries", tier: 2, type: "active", maxRank: 5, req: "shout", mana: 14, cooldownMs: 8000, baseMult: 1.0, rankMult: 0.15, synergy: { from: "shout", pct: 10 } },
+    { id: "warcry", name: "War Cry", desc: "A concussive bellow that staggers the horde", tree: "War Cries", tier: 2, type: "active", maxRank: 5, req: "shout", mana: 14, cooldownMs: 8000, baseMult: 1.0, rankMult: 0.15, synergies: [{ from: "shout", pct: 10 }] },
     { id: "bloodrage", name: "Blood Rage", desc: "Every wound you deal feeds you", tree: "War Cries", tier: 3, type: "passive", maxRank: 10, passive: { lifeSteal: 1, dmgPct: 4 } },
     { id: "t5_blood", name: "Blood of the Mountain", desc: "Kragmar's stone runs in your veins", tree: "Might", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 14 } },
     { id: "t5_edge", name: "Warlord's Edge", desc: "Ten thousand swings, distilled", tree: "Might", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 5, crit: 1 } },
@@ -2000,10 +2000,10 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
   rogue: [
     { id: "multishot", name: "Multishot", desc: "One draw, a fan of death", tree: "Archery", tier: 1, type: "active", maxRank: 5, mana: 10, cooldownMs: 2000, baseMult: 0.9, rankMult: 0.1 },
     { id: "precision", name: "Precision", desc: "Aim for the gaps in the armor", tree: "Archery", tier: 1, type: "passive", maxRank: 10, passive: { crit: 2 } },
-    { id: "coldarrow", name: "Frost Arrow", desc: "An arrow of winter that chills the marrow", tree: "Archery", tier: 2, type: "active", maxRank: 5, req: "multishot", mana: 9, cooldownMs: 2500, baseMult: 1.3, rankMult: 0.2, synergy: { from: "multishot", pct: 7 } },
-    { id: "pierce", name: "Impaling Shot", desc: "Through one, through all", tree: "Archery", tier: 3, type: "active", maxRank: 5, req: "coldarrow", mana: 12, cooldownMs: 4000, baseMult: 1.1, rankMult: 0.2, synergy: { from: "coldarrow", pct: 8 } },
+    { id: "coldarrow", name: "Frost Arrow", desc: "An arrow of winter that chills the marrow", tree: "Archery", tier: 2, type: "active", maxRank: 5, req: "multishot", mana: 9, cooldownMs: 2500, baseMult: 1.3, rankMult: 0.2, synergies: [{ from: "multishot", pct: 7 }] },
+    { id: "pierce", name: "Impaling Shot", desc: "Through one, through all", tree: "Archery", tier: 3, type: "active", maxRank: 5, req: "coldarrow", mana: 12, cooldownMs: 4000, baseMult: 1.1, rankMult: 0.2, synergies: [{ from: "coldarrow", pct: 8 }] },
     { id: "sharpshot", name: "Sharpshooter", desc: "Faster hands, deadlier arrows", tree: "Archery", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 5, atkSpd: 2 } },
-    { id: "vengeance", name: "Rain of Vengeance", desc: "Blot out the sky", tree: "Archery", tier: 4, type: "ultimate", maxRank: 5, req: "pierce", mana: 28, cooldownMs: 22000, baseMult: 1.2, rankMult: 0.25, synergy: { from: "pierce", pct: 10 } },
+    { id: "vengeance", name: "Rain of Vengeance", desc: "Blot out the sky", tree: "Archery", tier: 4, type: "ultimate", maxRank: 5, req: "pierce", mana: 28, cooldownMs: 22000, baseMult: 1.2, rankMult: 0.25, synergies: [{ from: "pierce", pct: 10 }] },
     { id: "dash", name: "Dash", desc: "Be somewhere else", tree: "Shadow", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 4000 },
     { id: "evasion", name: "Evasion", desc: "They cannot kill what they cannot touch", tree: "Shadow", tier: 2, type: "passive", maxRank: 10, passive: { dodge: 2, moveSpd: 2 } },
     { id: "envenom", name: "Envenom", desc: "A coating of something unpleasant", tree: "Shadow", tier: 3, type: "passive", maxRank: 10, passive: { dmg: 3 } },
@@ -2014,11 +2014,11 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "ks_lethality", name: "Lethality", desc: "When you find the gap, drive everything through it", tree: "Shadow", tier: 5, type: "passive", maxRank: 1, keystone: "Critical hits deal ×2.5 instead of ×2" },
   ],
   sorcerer: [
-    { id: "chain", name: "Chain Lightning", desc: "Lightning that hungers for company", tree: "Elements", tier: 1, type: "active", maxRank: 5, mana: 14, cooldownMs: 2500, baseMult: 1.0, rankMult: 0.15, synergy: { from: "frostnova", pct: 6 } },
+    { id: "chain", name: "Chain Lightning", desc: "Lightning that hungers for company", tree: "Elements", tier: 1, type: "active", maxRank: 5, mana: 14, cooldownMs: 2500, baseMult: 1.0, rankMult: 0.15, synergies: [{ from: "frostnova", pct: 6 }] },
     { id: "warmth", name: "Warmth", desc: "The fire within never gutters", tree: "Arcane", tier: 1, type: "passive", maxRank: 10, passive: { manaRegen: 1 } },
-    { id: "frostnova", name: "Frost Nova", desc: "A ring of killing cold", tree: "Elements", tier: 2, type: "active", maxRank: 5, req: "chain", mana: 15, cooldownMs: 5000, baseMult: 0.8, rankMult: 0.15, synergy: { from: "chain", pct: 7 } },
-    { id: "firewall", name: "Firewall", desc: "Paint the floor with flame", tree: "Elements", tier: 3, type: "active", maxRank: 5, req: "frostnova", mana: 18, cooldownMs: 7000, baseMult: 0.5, rankMult: 0.1, synergy: { from: "chain", pct: 6 } },
-    { id: "meteor", name: "Meteor", desc: "Call down the burning sky", tree: "Elements", tier: 4, type: "ultimate", maxRank: 5, req: "firewall", mana: 32, cooldownMs: 24000, baseMult: 3.5, rankMult: 0.5, synergy: { from: "firewall", pct: 10 } },
+    { id: "frostnova", name: "Frost Nova", desc: "A ring of killing cold", tree: "Elements", tier: 2, type: "active", maxRank: 5, req: "chain", mana: 15, cooldownMs: 5000, baseMult: 0.8, rankMult: 0.15, synergies: [{ from: "chain", pct: 7 }] },
+    { id: "firewall", name: "Firewall", desc: "Paint the floor with flame", tree: "Elements", tier: 3, type: "active", maxRank: 5, req: "frostnova", mana: 18, cooldownMs: 7000, baseMult: 0.5, rankMult: 0.1, synergies: [{ from: "chain", pct: 6 }] },
+    { id: "meteor", name: "Meteor", desc: "Call down the burning sky", tree: "Elements", tier: 4, type: "ultimate", maxRank: 5, req: "firewall", mana: 32, cooldownMs: 24000, baseMult: 3.5, rankMult: 0.5, synergies: [{ from: "firewall", pct: 10 }] },
     { id: "teleport", name: "Teleport", desc: "Space is a suggestion", tree: "Arcane", tier: 1, type: "active", maxRank: 5, mana: 10, cooldownMs: 3000 },
     { id: "attunement", name: "Arcane Attunement", desc: "The well runs deeper", tree: "Arcane", tier: 2, type: "passive", maxRank: 10, passive: { maxMana: 8, cdr: 1 } },
     { id: "archon", name: "Archon", desc: "Power beyond the flesh", tree: "Arcane", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 4, maxMana: 4 } },
@@ -2031,9 +2031,9 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
   paladin: [
     { id: "smite", name: "Smite", desc: "A shield-blow that leaves them reeling", tree: "Combat", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 1400, baseMult: 1.4, rankMult: 0.2 },
     { id: "devotion", name: "Devotion", desc: "The body is a temple; fortify it", tree: "Combat", tier: 1, type: "passive", maxRank: 10, passive: { maxHp: 8, armor: 2 } },
-    { id: "zeal", name: "Zeal", desc: "Three strikes in the space of one breath", tree: "Combat", tier: 2, type: "active", maxRank: 5, req: "smite", mana: 10, cooldownMs: 2600, baseMult: 0.75, rankMult: 0.1, synergy: { from: "smite", pct: 8 } },
-    { id: "hammers", name: "Hammer of Faith", desc: "Holy steel in every direction", tree: "Combat", tier: 3, type: "active", maxRank: 5, req: "zeal", mana: 14, cooldownMs: 3200, baseMult: 1.0, rankMult: 0.15, synergy: { from: "zeal", pct: 7 } },
-    { id: "fistofheavens", name: "Judgment", desc: "The sky passes judgment", tree: "Combat", tier: 4, type: "ultimate", maxRank: 5, req: "hammers", mana: 30, cooldownMs: 22000, baseMult: 3.2, rankMult: 0.5, synergy: { from: "hammers", pct: 10 } },
+    { id: "zeal", name: "Zeal", desc: "Three strikes in the space of one breath", tree: "Combat", tier: 2, type: "active", maxRank: 5, req: "smite", mana: 10, cooldownMs: 2600, baseMult: 0.75, rankMult: 0.1, synergies: [{ from: "smite", pct: 8 }] },
+    { id: "hammers", name: "Hammer of Faith", desc: "Holy steel in every direction", tree: "Combat", tier: 3, type: "active", maxRank: 5, req: "zeal", mana: 14, cooldownMs: 3200, baseMult: 1.0, rankMult: 0.15, synergies: [{ from: "zeal", pct: 7 }] },
+    { id: "fistofheavens", name: "Judgment", desc: "The sky passes judgment", tree: "Combat", tier: 4, type: "ultimate", maxRank: 5, req: "hammers", mana: 30, cooldownMs: 22000, baseMult: 3.2, rankMult: 0.5, synergies: [{ from: "hammers", pct: 10 }] },
     { id: "prayer", name: "Prayer", desc: "Mend the wounds of everyone beside you", tree: "Auras", tier: 1, type: "active", maxRank: 5, mana: 12, cooldownMs: 9000, baseMult: 0.8, rankMult: 0.15 },
     { id: "resolve", name: "Resolve", desc: "Faith, worn as armor", tree: "Auras", tier: 2, type: "passive", maxRank: 10, passive: { allRes: 2, armor: 1 } },
     { id: "fervor", name: "Fervor", desc: "Righteousness quickens the hand", tree: "Auras", tier: 3, type: "passive", maxRank: 10, passive: { atkSpd: 3, dmgPct: 3 } },
@@ -2046,12 +2046,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
   necromancer: [
     { id: "teeth", name: "Teeth", desc: "A fan of splintered bone", tree: "Poison & Bone", tier: 1, type: "active", maxRank: 5, mana: 9, cooldownMs: 2000, baseMult: 0.6, rankMult: 0.08 },
     { id: "bonearmor", name: "Bone Armor", desc: "The dead protect their shepherd", tree: "Poison & Bone", tier: 1, type: "passive", maxRank: 10, passive: { armor: 3, maxHp: 4 } },
-    { id: "decrepify", name: "Wither", desc: "A curse that makes flesh remember its age", tree: "Poison & Bone", tier: 2, type: "active", maxRank: 5, req: "teeth", mana: 12, cooldownMs: 6000, baseMult: 0.4, rankMult: 0.08, synergy: { from: "teeth", pct: 6 } },
-    { id: "poisonnova", name: "Poison Nova", desc: "A breath the whole room regrets", tree: "Poison & Bone", tier: 3, type: "active", maxRank: 5, req: "decrepify", mana: 16, cooldownMs: 6000, baseMult: 1.0, rankMult: 0.15, synergy: { from: "decrepify", pct: 8 } },
+    { id: "decrepify", name: "Wither", desc: "A curse that makes flesh remember its age", tree: "Poison & Bone", tier: 2, type: "active", maxRank: 5, req: "teeth", mana: 12, cooldownMs: 6000, baseMult: 0.4, rankMult: 0.08, synergies: [{ from: "teeth", pct: 6 }] },
+    { id: "poisonnova", name: "Poison Nova", desc: "A breath the whole room regrets", tree: "Poison & Bone", tier: 3, type: "active", maxRank: 5, req: "decrepify", mana: 16, cooldownMs: 6000, baseMult: 1.0, rankMult: 0.15, synergies: [{ from: "decrepify", pct: 8 }] },
     { id: "skeleton", name: "Raise Skeleton", desc: "The floor is full of volunteers", tree: "Summoning", tier: 1, type: "active", maxRank: 5, mana: 15, cooldownMs: 6000, baseMult: 0.4, rankMult: 0.08 },
     { id: "deathpact", name: "Death's Bargain", desc: "Every ending feeds you", tree: "Summoning", tier: 2, type: "passive", maxRank: 10, passive: { manaRegen: 0.6, dmgPct: 3 } },
     { id: "mastery", name: "Skeleton Mastery", desc: "Better bones, sharper service", tree: "Summoning", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 4, maxMana: 5 } },
-    { id: "army", name: "Army of the Dead", desc: "All of them. At once.", tree: "Summoning", tier: 4, type: "ultimate", maxRank: 5, req: "skeleton", mana: 32, cooldownMs: 26000, baseMult: 0.6, rankMult: 0.1, synergy: { from: "skeleton", pct: 10 } },
+    { id: "army", name: "Army of the Dead", desc: "All of them. At once.", tree: "Summoning", tier: 4, type: "ultimate", maxRank: 5, req: "skeleton", mana: 32, cooldownMs: 26000, baseMult: 0.6, rankMult: 0.1, synergies: [{ from: "skeleton", pct: 10 }] },
     { id: "t5_ossuary", name: "Ossuary King", desc: "Every skeleton in the world is technically yours", tree: "Poison & Bone", tier: 5, type: "passive", maxRank: 12, passive: { dmg: 2, maxMana: 5 } },
     { id: "t5_plague", name: "Plague Eternal", desc: "It never burned out. It just got patient.", tree: "Poison & Bone", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 5 } },
     { id: "t5_pact", name: "Deathlord's Pact", desc: "Death signed. You witnessed.", tree: "Summoning", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 8, manaRegen: 0.4 } },
@@ -2061,9 +2061,9 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
   druid: [
     { id: "firestorm", name: "Firestorm", desc: "Ribbons of flame race along the ground", tree: "Elemental", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 2500, baseMult: 0.45, rankMult: 0.08 },
     { id: "oakheart", name: "Heart of Oak", desc: "Roots run deep; so does the life in you", tree: "Wild", tier: 1, type: "passive", maxRank: 10, passive: { maxHp: 10 } },
-    { id: "twister", name: "Twister", desc: "A blade of wind that carves a path", tree: "Elemental", tier: 2, type: "active", maxRank: 5, req: "firestorm", mana: 11, cooldownMs: 3000, baseMult: 0.9, rankMult: 0.15, synergy: { from: "firestorm", pct: 7 } },
-    { id: "volcano", name: "Volcano", desc: "Ask the earth for its opinion", tree: "Elemental", tier: 3, type: "active", maxRank: 5, req: "twister", mana: 17, cooldownMs: 6500, baseMult: 1.4, rankMult: 0.2, synergy: { from: "twister", pct: 8 } },
-    { id: "hurricane", name: "Hurricane", desc: "Wear the storm like a cloak", tree: "Elemental", tier: 4, type: "ultimate", maxRank: 5, req: "volcano", mana: 30, cooldownMs: 24000, baseMult: 0.5, rankMult: 0.1, synergy: { from: "volcano", pct: 10 } },
+    { id: "twister", name: "Twister", desc: "A blade of wind that carves a path", tree: "Elemental", tier: 2, type: "active", maxRank: 5, req: "firestorm", mana: 11, cooldownMs: 3000, baseMult: 0.9, rankMult: 0.15, synergies: [{ from: "firestorm", pct: 7 }] },
+    { id: "volcano", name: "Volcano", desc: "Ask the earth for its opinion", tree: "Elemental", tier: 3, type: "active", maxRank: 5, req: "twister", mana: 17, cooldownMs: 6500, baseMult: 1.4, rankMult: 0.2, synergies: [{ from: "twister", pct: 8 }] },
+    { id: "hurricane", name: "Hurricane", desc: "Wear the storm like a cloak", tree: "Elemental", tier: 4, type: "ultimate", maxRank: 5, req: "volcano", mana: 30, cooldownMs: 24000, baseMult: 0.5, rankMult: 0.1, synergies: [{ from: "volcano", pct: 10 }] },
     { id: "barkskin", name: "Barkskin", desc: "Let them chew on that", tree: "Wild", tier: 1, type: "passive", maxRank: 10, passive: { armor: 2, thorns: 1 } },
     { id: "werewolf", name: "Werewolf", desc: "Become the thing the dark is afraid of", tree: "Wild", tier: 2, type: "active", maxRank: 5, mana: 12, cooldownMs: 14000 },
     { id: "hunger", name: "Feral Hunger", desc: "The wolf is always starving", tree: "Wild", tier: 3, type: "passive", maxRank: 10, passive: { lifeSteal: 1, atkSpd: 2 } },
@@ -2134,8 +2134,9 @@ export function skillDamageMult(node: SkillNode, skills: Record<string, number>)
   const rank = skills[node.id] ?? 0;
   if (rank <= 0 || node.baseMult === undefined) return 1;
   let mult = node.baseMult + (node.rankMult ?? 0) * (rank - 1);
-  if (node.synergy) {
-    mult *= 1 + ((skills[node.synergy.from] ?? 0) * node.synergy.pct) / 100;
+  // each synergy source stacks additively into the multiplier — investing across the web pays off
+  for (const s of node.synergies ?? []) {
+    mult *= 1 + ((skills[s.from] ?? 0) * s.pct) / 100;
   }
   return mult;
 }

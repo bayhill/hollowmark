@@ -1097,10 +1097,10 @@ export class SkillPanel {
       );
       y += 15;
     }
-    if (node.synergy) {
-      const from = SKILL_TREES[this.cls as ClassName]?.find((n) => n.id === node.synergy!.from);
+    for (const s of node.synergies ?? []) {
+      const from = SKILL_TREES[this.cls as ClassName]?.find((n) => n.id === s.from);
       texts.push(
-        this.scene.add.text(10, y, `synergy: +${node.synergy.pct}% damage per point in ${from?.name ?? node.synergy.from}`, {
+        this.scene.add.text(10, y, `synergy: +${s.pct}% damage per point in ${from?.name ?? s.from}`, {
           fontFamily: "monospace", fontSize: "12px", color: "#6a8cff", wordWrap: { width: 300 },
         })
       );
