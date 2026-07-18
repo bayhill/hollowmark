@@ -892,6 +892,63 @@ export class DungeonRoom extends Room<DungeonState> {
         this.sendLoadout(client, p);
         client.send("smokeleveled", { level: p.level, skillPoints: p.skillPoints });
       });
+      // --- keystone-probe hooks: make each keystone observable through its REAL code path ---
+      // set a few derived/pool values deterministically (crit%, flat cold dmg, current hp/mana)
+      this.onMessage("smokeset", (client: Client, msg: { crit?: number; cold?: number; hp?: number; mana?: number }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        if (msg?.crit !== undefined) p.derived.crit = msg.crit;
+        if (msg?.cold !== undefined) p.derived.coldDmg = msg.cold;
+        if (msg?.hp !== undefined) p.hp = Math.min(p.maxHp, Math.max(1, Math.floor(msg.hp)));
+        if (msg?.mana !== undefined) p.mana = Math.min(p.maxMana, Math.max(0, Math.floor(msg.mana)));
+      });
+      // report a deterministic outgoing-damage sample (base [100,100], no gear roll) — the crit
+      // (Lethality) and wolf (Primal Fury) keystone branches both live in outgoingDamage
+      this.onMessage("smokedmg", (client: Client) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        client.send("smokedmgval", { v: this.outgoingDamage(p, [100, 100], 1) });
+      });
+      // take a real cold hit and report whether it chilled us — exercises the Immovable gate
+      this.onMessage("smokechill", (client: Client) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        this.damagePlayer(client.sessionId, p, 5, "the cold", "cold");
+        client.send("smokechilled", { chilled: p.chilledUntil > Date.now() });
+      });
+      // take a real physical hit (observe hp) — exercises the Bulwark damage-reduction step
+      this.onMessage("smokehurt", (client: Client, msg: { amount?: number }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        this.damagePlayer(client.sessionId, p, Math.max(1, Math.floor(msg?.amount ?? 100)), "the probe");
+      });
+      // spawn a specific monster KIND (e.g. a cold-resistant wraith for Unraveling), no camp/aggro
+      this.onMessage("smokespawnkind", (client: Client, msg: { kind?: string; hp?: number }) => {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) return;
+        const kind = (msg?.kind ?? "zombie") as MonsterKind;
+        const def = MONSTERS[kind];
+        if (!def) return;
+        const m = new Monster();
+        m.kind = kind;
+        const pos = this.scatter(p.x, p.y, 40);
+        m.x = pos.x;
+        m.y = pos.y;
+        m.hp = m.maxHp = Math.max(1, Math.floor(msg?.hp ?? def.maxHp));
+        m.camp = -3;
+        const id = `kind_${this.nextId++}`;
+        this.state.monsters.set(id, m);
+        client.send("smokechamp", { id });
+      });
+      // deal a deterministic all-cold hit to a mob via the REAL damageMonster path (resist + the
+      // Unraveling penetration branch); observe the mob's synced hp. Also one-shots a 1-hp mob so
+      // Soul Siphon's on-kill restore can be observed.
+      this.onMessage("smokedmgmob", (client: Client, msg: { id?: string }) => {
+        const p = this.state.players.get(client.sessionId);
+        const m = msg?.id ? this.state.monsters.get(msg.id) : undefined;
+        if (!p || !m || !msg?.id) return;
+        this.damageMonster(msg.id, m, this.outgoingDamage(p, [0, 0], 1), client.sessionId);
+      });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
       this.handleSocketRune(client, msg)

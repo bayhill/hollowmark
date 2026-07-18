@@ -785,3 +785,16 @@ Four outliers, now corrected:
 - **Holy Wrath** — mild trim (0.80→0.74) and correctly modelled as a splash-AoE nuke rather than a pure single-target strike.
 
 Everything else (Rend's strike+bleed, the three hazards, Holy Fire, Blood Boil, the two summons) already sat in-band and was left alone. **Verification:** `skill-balance.ts` green (all 12 new actives in-band) + typecheck ×2 + full `npm run smoke`.
+
+## Closing the keystone gap — every class keystone now runtime-verified
+
+The class keystones were the last effects verified only structurally (typecheck + code inspection) — they're conditional damage *modifiers*, so the earlier skills-probe couldn't see them. This closes that: six small dev hooks make each keystone observable through its **real** code path, and `scratchpad/keystone-probe.ts` measures each against a control hero (same class, keystone not allocated) so the delta is provably the keystone's doing — deterministic, no averaging.
+
+- **Immovable** — a real cold hit (`smokechill`) chills the control but not the keystone hero.
+- **Lethality** — a forced crit (`smokeset {crit:100}` → `smokedmg` sample) reads **×2.5 vs ×2** (ratio exactly 1.250).
+- **Unraveling** — a deterministic all-cold hit into a cold-resistant wraith (res 60) via the real `damageMonster` path deals **83 vs 51** (the +25 penetration).
+- **Bulwark** — a fixed 1000 hit while healthy costs **800 vs 1000** (the −20%).
+- **Soul Siphon** — a kill restores **+~3% life & mana on top of regen** (keystone +10.7hp/+4.9mp vs control's regen-only +1.7/+2.9).
+- **Primal Fury** — a Werewolf-form damage sample reads **+30%** (ratio exactly 1.300).
+
+The hooks (`smokeset` / `smokedmg` / `smokechill` / `smokehurt` / `smokespawnkind` / `smokedmgmob`) are all behind the production-gated `TEST_HOOKS` flag, and drive the real `outgoingDamage` / `damagePlayer` / `damageMonster` code — nothing re-implements the keystone logic. **6/6 keystones green.** With the skills-probe (12 actives) this leaves the whole skill expansion — trees, synergy web, keystones — verified in motion, not just on paper.
