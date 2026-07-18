@@ -1257,6 +1257,14 @@ export const MORTAR_DMG: [number, number] = [8, 14]; // per shell, before floor 
 // Warded: raises a periodic bubble that eats ALL damage. Burst it in the gaps, or wait it out.
 export const WARD_INTERVAL_MS = 6200; // between wards (measured ward-start to ward-start)
 export const WARD_DURATION_MS = 2100; // how long each bubble holds
+// Hexer: from range, lays a telegraphed curse-circle on your position; step out before it seals or
+// your own blows go feeble for a spell. Doesn't hurt you — it declaws you. Burst the caster or reposition.
+export const HEX_INTERVAL_MS = 5200; // between hexes, per Hexer champion
+export const HEX_TELEGRAPH_MS = 850; // the curse gathers this long before it seals — time to step out
+export const HEX_RADIUS = 60; // seal radius — dodgeable, but it follows where you WERE
+export const HEX_RANGE = 300; // a Hexer won't reach for you from further than this
+export const HEX_DURATION_MS = 4000; // how long a sealed curse saps your damage
+export const HEX_DMG_MULT = 0.6; // a hexed hero deals 60% damage until it lifts
 
 // Depth scaling eases past a full campaign's worth of danger. Through the base 4-act game monster
 // HP/damage climb steeply — players are still gaining levels and gear. In the endless deep (past
@@ -1814,6 +1822,7 @@ export interface ChampionMod {
   reflect?: number; // throws this fraction of each melee blow back at the attacker
   mortar?: boolean; // lobs telegraphed AoE shells at your position — keep moving
   warded?: boolean; // raises a periodic damage-immunity bubble — burst it in the gaps
+  hexer?: boolean; // seals a telegraphed curse-circle that saps your damage — step out or burst it
   aura?: number; // client aura tint (defaults to champion blue when absent)
 }
 
@@ -1832,6 +1841,7 @@ export const CHAMPION_MODS: ChampionMod[] = [
   { id: "spiked", label: "Spiked", hpMult: 1.6, dmgMult: 1, speedMult: 0.95, cdMult: 1, reflect: 0.15, aura: 0xe0872a },
   { id: "mortar", label: "Mortar", hpMult: 1.3, dmgMult: 1, speedMult: 0.95, cdMult: 1, mortar: true, aura: 0x6ad0b0 },
   { id: "warded", label: "Warded", hpMult: 1.5, dmgMult: 1.05, speedMult: 1, cdMult: 1, warded: true, aura: 0xc9b24a },
+  { id: "hexer", label: "Hexer", hpMult: 1.35, dmgMult: 1, speedMult: 1, cdMult: 1, hexer: true, aura: 0x8a4fbf },
 ];
 
 export const FE_EXPLODE_RADIUS = 75;

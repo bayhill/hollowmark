@@ -104,6 +104,12 @@ import {
   MORTAR_DMG,
   WARD_INTERVAL_MS,
   WARD_DURATION_MS,
+  HEX_INTERVAL_MS,
+  HEX_TELEGRAPH_MS,
+  HEX_RADIUS,
+  HEX_RANGE,
+  HEX_DURATION_MS,
+  HEX_DMG_MULT,
   MANA_POTION_DROP_CHANCE,
   MANA_POTION_RESTORE_FRACTION,
   BOSS_MANA_POTION_DROPS,
@@ -478,6 +484,7 @@ export class Player extends Schema {
   buffMfUntil = 0;
   buffSpeedUntil = 0;
   curseVulnUntil = 0; // a dungeon bargain gone wrong — takes extra harm for a while
+  hexUntil = 0; // Hexer's curse: your own blows go feeble while now < this (server-only)
   effects = new Set<string>(); // unique effects from equipped gear
   powers = new Set<string>(); // legendary skill-powers that REWRITE a skill (from gear)
   lastCrit = false; // set by outgoingDamage, read by damageMonster for the hit broadcast
@@ -555,6 +562,10 @@ export class Monster extends Schema {
   mortarTY = 0;
   wardUntil = 0; // Warded: incoming damage is refused while now < this
   nextWardAt = 0; // …and when the next bubble goes up
+  hexAt = 0; // Hexer: when the next curse-circle telegraph begins
+  hexFireAt = 0; // …and when the gathered curse seals (applies the hex)
+  hexTX = 0; // the ground the curse was laid on (locked at telegraph, so you can step out)
+  hexTY = 0;
 }
 
 // a hired Rogue: follows her employer, shoots what threatens them, can die
@@ -2764,7 +2775,9 @@ export class DungeonRoom extends Room<DungeonState> {
     const wolf = now < p.wolfUntil ? WOLF_DMG_MULT : 1;
     // Death Wish: the dying hit hardest
     const berserk = p.effects.has("berserk_low") && p.hp < p.maxHp * BERSERK_THRESHOLD ? BERSERK_MULT : 1;
-    let total = flat * (1 + (d.dmgPct ?? 0) / 100) * mult * shout * blessed * wolf * berserk;
+    // Hexer's curse declaws you — every blow lands feeble until it lifts
+    const hexed = now < p.hexUntil ? HEX_DMG_MULT : 1;
+    let total = flat * (1 + (d.dmgPct ?? 0) / 100) * mult * shout * blessed * wolf * berserk * hexed;
     p.lastCrit = Math.random() < (d.crit ?? 0) / 100;
     if (p.lastCrit) total *= 2;
     return Math.max(1, Math.round(total));
@@ -5357,6 +5370,7 @@ export class DungeonRoom extends Room<DungeonState> {
         // stagger the behavioral packs' first special so the whole camp doesn't fire as one
         if (m.modifier === "mortar") m.mortarAt = now + 800 + Math.random() * MORTAR_INTERVAL_MS;
         if (m.modifier === "warded") m.nextWardAt = now + 1500 + Math.random() * 2000;
+        if (m.modifier === "hexer") m.hexAt = now + 1000 + Math.random() * 2500;
       }
 
       // brood-mothers and nova lords work their horrors even while they kite
@@ -5365,6 +5379,7 @@ export class DungeonRoom extends Room<DungeonState> {
       // behavioral champion packs: their tricks run while aggroed, alongside normal movement
       if (m.modifier === "mortar") this.updateMortar(m, foe, now);
       else if (m.modifier === "warded") this.updateWard(m, id, now);
+      else if (m.modifier === "hexer") this.updateHex(m, foe, now);
       // ranged monsters: keep distance and shoot — data-driven, one table row per kind
       const ranged = RANGED_MONSTERS[m.kind];
       if (ranged) {
@@ -5622,6 +5637,32 @@ export class DungeonRoom extends Room<DungeonState> {
       m.wardUntil = now + WARD_DURATION_MS;
       m.nextWardAt = now + WARD_INTERVAL_MS;
       this.broadcast("wardup", { id, x: m.x, y: m.y, ms: WARD_DURATION_MS });
+    }
+  }
+
+  // Hexer champions lay a curse-circle on where you're standing: a purple ring gathers, and if
+  // you're still inside when it seals your own damage is sapped for a spell. Mirrors the Mortar
+  // telegraph — aim is locked at cast, so stepping out (or bursting the caster) beats it.
+  private updateHex(m: Monster, foe: { x: number; y: number }, now: number) {
+    if (m.hexFireAt > 0) {
+      if (now >= m.hexFireAt) {
+        m.hexFireAt = 0;
+        this.broadcast("hexhit", { x: m.hexTX, y: m.hexTY, r: HEX_RADIUS });
+        this.state.players.forEach((p) => {
+          if (p.hp <= 0) return;
+          if (Math.hypot(p.x - m.hexTX, p.y - m.hexTY) <= HEX_RADIUS) {
+            p.hexUntil = Math.max(p.hexUntil, now + HEX_DURATION_MS);
+          }
+        });
+      }
+      return;
+    }
+    if (now >= m.hexAt && Math.hypot(foe.x - m.x, foe.y - m.y) <= HEX_RANGE) {
+      m.hexTX = foe.x; // lock the seal now — step out of the ring before it closes
+      m.hexTY = foe.y;
+      m.hexFireAt = now + HEX_TELEGRAPH_MS;
+      m.hexAt = now + HEX_INTERVAL_MS;
+      this.broadcast("hexwarn", { x: m.hexTX, y: m.hexTY, r: HEX_RADIUS, ms: HEX_TELEGRAPH_MS });
     }
   }
 

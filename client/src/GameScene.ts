@@ -887,6 +887,32 @@ export class GameScene extends Phaser.Scene {
         this.cameras.main.shake(140, 0.005);
         this.sfx.hit();
       });
+      room.onMessage("hexwarn", (msg: any) => {
+        // a Hexer is sealing a curse-circle where you stand — a purple ring that closes toward the seal
+        const s = worldToScreen(msg.x, msg.y);
+        const hue = 0x9a5fd0;
+        const ring = this.add
+          .ellipse(s.x, s.y, msg.r * 2, msg.r, hue, 0.08)
+          .setStrokeStyle(2, hue, 0.85)
+          .setDepth(s.y - 1);
+        const seal = this.add.ellipse(s.x, s.y, msg.r * 2, msg.r, hue, 0.22).setDepth(s.y - 1).setScale(1);
+        // the seal shrinks inward as it gathers — get OUT of the ring before it closes
+        this.tweens.add({ targets: seal, scaleX: 0.05, scaleY: 0.05, duration: msg.ms, ease: "quad.in" });
+        this.tweens.add({ targets: ring, alpha: 0.5, duration: 200, yoyo: true, repeat: Math.ceil(msg.ms / 400) });
+        this.time.delayedCall(msg.ms, () => { ring.destroy(); seal.destroy(); });
+        this.sfx.novaWarn();
+      });
+      room.onMessage("hexhit", (msg: any) => {
+        // the curse sealed — a purple implosion; anyone caught is sapped (server-authoritative)
+        const s = worldToScreen(msg.x, msg.y);
+        const burst = this.add.ellipse(s.x, s.y, msg.r * 2, msg.r, 0x8a2ad0, 0.6).setDepth(s.y + 2).setScale(1.1);
+        this.tweens.add({ targets: burst, scale: 0.2, alpha: 0, duration: 340, onComplete: () => burst.destroy() });
+        const me = this.players.get(this.room?.sessionId ?? "");
+        if (me && Math.hypot(me.schema.x - msg.x, me.schema.y - msg.y) <= msg.r) {
+          this.floatText(me.schema.x, me.schema.y - 22, "Cursed!", "#c58ae8");
+        }
+        this.sfx.novaWarn();
+      });
       room.onMessage("wardup", (msg: any) => {
         // a Warded champion raised its bubble — a shield that follows it for the duration
         const ent = this.monsters.get(msg.id);
