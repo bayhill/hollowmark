@@ -1827,12 +1827,16 @@ export class GameScene extends Phaser.Scene {
     const cv = this.textures.createCanvas("lightmask", size, size);
     if (!cv) return;
     const ctx = cv.getContext();
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 80, size / 2, size / 2, size * 0.48);
+    // The lit-to-dark falloff is packed into the inner ~28% of the texture; the rest holds a
+    // full dark plateau. Paired with the larger coverage scale in updateLight, this keeps the
+    // on-screen lit radius identical while the darkness ALWAYS overfills the viewport — so the
+    // square edge can never track the hero into view (the old "black box beside the wall" bug).
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 46, size / 2, size / 2, size * 0.275);
     grad.addColorStop(0, "rgba(8,8,14,0)");
     grad.addColorStop(0.3, "rgba(8,8,14,0.14)");
     grad.addColorStop(0.6, "rgba(8,8,14,0.55)");
     grad.addColorStop(0.9, "rgba(8,8,14,0.84)");
-    grad.addColorStop(1, "rgba(8,8,14,0.84)"); // hold to the texture edge — no bright corners
+    grad.addColorStop(1, "rgba(8,8,14,0.84)"); // holds this dark to every corner of the square
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     cv.refresh();
@@ -1865,7 +1869,7 @@ export class GameScene extends Phaser.Scene {
 
     // cover the viewport at any zoom; Hollowmere is brighter; flames breathe —
     // and the deeper you go, the closer the darkness leans in
-    const base = (Math.max(cam.displayWidth, cam.displayHeight) * 1.55) / 1024;
+    const base = (Math.max(cam.displayWidth, cam.displayHeight) * 2.7) / 1024;
     const townMult = me && isInTown(me.schema.y) ? 1.5 : 1;
     const band = Math.min(3, (this.room.state.act ?? 1) - 1);
     // the surface sees a grim grey daylight; underground the dark leans in with depth

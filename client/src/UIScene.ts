@@ -32,6 +32,7 @@ import {
   paragonXpForNext,
 } from "@hollowmark/common";
 import { CharacterPanel, InventoryPanel, SkillPanel, rarityColorStr, statLines } from "./ui";
+import { arcaneFrame, ARCANE } from "./panelFrame";
 import { ensureItemIcons } from "./icons";
 import type { GameScene } from "./GameScene";
 
@@ -336,22 +337,17 @@ export class UIScene extends Phaser.Scene {
     const x = Math.round(this.scale.width / 2 - W / 2);
     const y = Math.round(Math.max(40, this.scale.height * 0.16));
     const root = this.add.container(x, y).setDepth(24);
-    const bg = this.add.graphics();
-    bg.fillStyle(0x100e14, 0.96);
-    bg.fillRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(2, trim, 0.9);
-    bg.strokeRoundedRect(0, 0, W, H, 6);
-    const header = this.add.text(W / 2, 12, title, {
-      fontFamily: "monospace", fontSize: "16px", color: titleColor, fontStyle: "bold",
-    }).setOrigin(0.5, 0);
-    const goldLine = this.add.text(W / 2, 30, `your gold: ${this.myGold()}`, {
+    // one gothic frame for every storefront — per-NPC trim/titleColor are ignored on purpose
+    void trim; void titleColor;
+    arcaneFrame(this, root, W, H, { title, runes: false });
+    const goldLine = this.add.text(W / 2, 31, `your gold: ${this.myGold()}`, {
       fontFamily: "monospace", fontSize: "13px", color: "#d8b13a",
     }).setOrigin(0.5, 0);
-    const closeX = this.add.text(W - 8, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
+    const closeX = this.add.text(W - 10, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", onClose);
-    root.add([bg, header, goldLine, closeX]);
+    root.add([goldLine, closeX]);
     return root;
   }
 
@@ -1054,19 +1050,10 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5, 0));
     const H = footer + 22;
 
-    const bg = this.add.graphics();
-    bg.fillStyle(0x0d0c14, 0.95);
-    bg.fillRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(2, 0x6a5a9a, 0.9);
-    bg.strokeRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(1, 0x3a2f52, 0.9);
-    bg.strokeRoundedRect(3, 3, W - 6, H - 6, 5);
-    const header = this.add.text(W / 2, 14, "— THE CODEX —", {
-      fontFamily: "monospace", fontSize: "16px", color: "#c9b8e8", fontStyle: "bold",
-    }).setOrigin(0.5, 0);
-    const closeX = this.add.text(W - 8, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
+    arcaneFrame(this, root, W, H, { accent: ARCANE.violet, title: "THE CODEX", runes: false });
+    const closeX = this.add.text(W - 10, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
       .setOrigin(1, 0).setInteractive({ useHandCursor: true }).on("pointerdown", () => this.closeCodex());
-    root.add([bg, header, closeX, ...rows]);
+    root.add([closeX, ...rows]);
     this.codexRoot = root;
     this.codexBounds.setTo(x, y, W, H);
   }
@@ -1289,22 +1276,15 @@ export class UIScene extends Phaser.Scene {
     const y = Math.round(this.scale.height * 0.24);
     const root = this.add.container(x, y).setDepth(24);
 
-    const bg = this.add.graphics();
-    bg.fillStyle(0x0e120e, 0.95);
-    bg.fillRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(2, 0x3f7a4f, 0.9);
-    bg.strokeRoundedRect(0, 0, W, H, 6);
-    const header = this.add.text(W / 2, 12, "LYSA'S REMEDIES", {
-      fontFamily: "monospace", fontSize: "16px", color: "#7fdc9f", fontStyle: "bold",
-    }).setOrigin(0.5, 0);
-    const goldLine = this.add.text(W / 2, 30, `your gold: ${Math.floor(me?.gold ?? 0)}`, {
+    arcaneFrame(this, root, W, H, { title: "LYSA'S REMEDIES", runes: false });
+    const goldLine = this.add.text(W / 2, 31, `your gold: ${Math.floor(me?.gold ?? 0)}`, {
       fontFamily: "monospace", fontSize: "13px", color: "#d8b13a",
     }).setOrigin(0.5, 0);
-    const closeX = this.add.text(W - 8, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
+    const closeX = this.add.text(W - 10, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", () => this.closeShop());
-    root.add([bg, header, goldLine, closeX]);
+    root.add([goldLine, closeX]);
 
     const rows: Array<{ kind: "health" | "mana"; name: string; color: number; count: number }> = [
       { kind: "health", name: "Health Potion", color: 0xc03838, count: me?.potions ?? 0 },
@@ -1445,11 +1425,7 @@ export class UIScene extends Phaser.Scene {
     const W = 300;
     const H = 74;
     const root = this.add.container(Math.round(this.scale.width / 2 - W / 2), Math.round(this.scale.height * 0.68)).setDepth(26);
-    const bg = this.add.graphics();
-    bg.fillStyle(0x100e14, 0.96);
-    bg.fillRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(2, 0xd8b13a, 0.9);
-    bg.strokeRoundedRect(0, 0, W, H, 6);
+    arcaneFrame(this, root, W, H, { accent: ARCANE.gold, runes: false, glow: false });
     const line = this.add.text(W / 2, 14, `🤝 ${name} wants to trade`, {
       fontFamily: "monospace", fontSize: "14px", color: "#e8cf7a", fontStyle: "bold",
     }).setOrigin(0.5, 0);
@@ -1467,7 +1443,7 @@ export class UIScene extends Phaser.Scene {
         this.gs.room?.send("tradedecline", {});
         this.dismissTradeInvite();
       });
-    root.add([bg, line, accept, decline]);
+    root.add([line, accept, decline]);
     this.tradeInviteRoot = root;
     this.time.delayedCall(15000, () => this.dismissTradeInvite(root));
   }
@@ -1794,17 +1770,8 @@ export class UIScene extends Phaser.Scene {
     cy += 16;
     const H = cy + 8;
 
-    const bg = this.add.graphics();
-    bg.fillStyle(0x0e0c14, 0.93);
-    bg.fillRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(2, 0x8a6a2a, 0.9);
-    bg.strokeRoundedRect(0, 0, W, H, 6);
-    bg.lineStyle(1, 0x4a3a1a, 0.9);
-    bg.strokeRoundedRect(3, 3, W - 6, H - 6, 5);
-    const header = this.add.text(W / 2, 14, "— QUEST LOG —", {
-      fontFamily: "monospace", fontSize: "16px", color: "#e8cf7a", fontStyle: "bold",
-    }).setOrigin(0.5, 0);
-    root.add([bg, header, ...rows]);
+    arcaneFrame(this, root, W, H, { accent: ARCANE.gold, title: "QUEST LOG", runes: false });
+    root.add([...rows]);
     this.questRoot = root;
     this.questBounds.setTo(x, y, W, H);
   }

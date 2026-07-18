@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { arcaneFrame, ARCANE, ArcaneFrameOpts } from "./panelFrame";
 import {
   ATTRS,
   ATTR_LABELS,
@@ -597,22 +598,10 @@ export class InventoryPanel {
     const lines = statLines(this.loadout.derived);
     this.panelH = derivedTop + Math.max(1, lines.length) * 16 + 34;
 
-    const bg = this.scene.add
-      .rectangle(0, 0, totalW, this.panelH, 0x120f1a, 0.96)
-      .setOrigin(0)
-      .setStrokeStyle(2, 0x54402a);
-    this.root.add(bg);
-    const goldLine = this.scene.add
-      .rectangle(3, 3, totalW - 6, this.panelH - 6, 0x000000, 0)
-      .setOrigin(0)
-      .setStrokeStyle(1, 0xd8b13a, 0.3);
-    this.root.add(goldLine);
-    for (const [cx, cy] of [[0, 0], [totalW - 5, 0], [0, this.panelH - 5], [totalW - 5, this.panelH - 5]]) {
-      this.root.add(this.scene.add.rectangle(cx, cy, 5, 5, 0xd8b13a, 0.75).setOrigin(0));
-    }
+    panelChrome(this.scene, this.root, totalW, this.panelH, { accent: ARCANE.violet, runes: false });
 
     this.root.add(
-      this.scene.add.text(off + 12, 10, "INVENTORY", { fontFamily: "monospace", fontSize: "16px", color: "#c9c9d4", fontStyle: "bold" })
+      this.scene.add.text(off + 12, 10, "INVENTORY", { fontFamily: "monospace", fontSize: "16px", color: ARCANE.text, fontStyle: "bold" })
     );
     this.root.add(
       this.scene.add.text(totalW - 12, 12, "[I] close", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(1, 0)
@@ -756,12 +745,9 @@ export class InventoryPanel {
 }
 
 // shared gothic panel chrome
-function panelChrome(scene: Phaser.Scene, root: Phaser.GameObjects.Container, w: number, h: number) {
-  root.add(scene.add.rectangle(0, 0, w, h, 0x120f1a, 0.96).setOrigin(0).setStrokeStyle(2, 0x54402a));
-  root.add(scene.add.rectangle(3, 3, w - 6, h - 6, 0x000000, 0).setOrigin(0).setStrokeStyle(1, 0xd8b13a, 0.3));
-  for (const [cx, cy] of [[0, 0], [w - 5, 0], [0, h - 5], [w - 5, h - 5]]) {
-    root.add(scene.add.rectangle(cx, cy, 5, 5, 0xd8b13a, 0.75).setOrigin(0));
-  }
+// Every panel's chrome flows through the shared Arcane Runic frame now.
+function panelChrome(scene: Phaser.Scene, root: Phaser.GameObjects.Container, w: number, h: number, opts: ArcaneFrameOpts = {}) {
+  arcaneFrame(scene, root, w, h, opts);
 }
 
 // --- the character sheet: attributes + the numbers that matter ---
@@ -855,15 +841,15 @@ export class CharacterPanel {
     // paragon only appears once you've broken the level ceiling
     const showParagon = (h.paragonLevel ?? 0) > 0 || (h.paragonPoints ?? 0) > 0;
     const paragonH = showParagon ? 28 + PARAGON_PERKS.length * 18 : 0;
-    this.panelH = paragonTop + paragonH + 12;
-    panelChrome(this.scene, this.root, CHAR_W, this.panelH);
+    this.panelH = paragonTop + paragonH + 20;
+    panelChrome(this.scene, this.root, CHAR_W, this.panelH, { accent: ARCANE.crimson });
     this.root.setPosition(10, 50);
 
     this.root.add(
-      this.scene.add.text(12, 10, h.name.toUpperCase(), { fontFamily: "monospace", fontSize: "16px", color: "#e8d8a8", fontStyle: "bold" })
+      this.scene.add.text(12, 10, h.name.toUpperCase(), { fontFamily: "monospace", fontSize: "16px", color: ARCANE.text, fontStyle: "bold" })
     );
     this.root.add(
-      this.scene.add.text(12, 28, `level ${h.level} ${h.cls}`, { fontFamily: "monospace", fontSize: "13px", color: "#8a8a96" })
+      this.scene.add.text(12, 28, `level ${h.level} ${h.cls}`, { fontFamily: "monospace", fontSize: "13px", color: ARCANE.dim })
     );
     this.root.add(
       this.scene.add.text(CHAR_W - 12, 12, "[C] close", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(1, 0)
@@ -1159,11 +1145,11 @@ export class SkillPanel {
     const top = 66;
     const rowH = NODE + 34;
     this.panelH = top + maxTier * rowH + 8;
-    panelChrome(this.scene, this.root, SKILL_W, this.panelH);
+    panelChrome(this.scene, this.root, SKILL_W, this.panelH, { accent: ARCANE.teal });
     this.root.setPosition(10, 50);
 
     this.root.add(
-      this.scene.add.text(12, 10, "SKILLS", { fontFamily: "monospace", fontSize: "16px", color: "#e8d8a8", fontStyle: "bold" })
+      this.scene.add.text(12, 10, "SKILLS", { fontFamily: "monospace", fontSize: "16px", color: ARCANE.text, fontStyle: "bold" })
     );
     this.root.add(
       this.scene.add.text(SKILL_W - 12, 12, "[S] close", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(1, 0)
@@ -1216,12 +1202,42 @@ export class SkillPanel {
         byTier.set(n.tier, [...(byTier.get(n.tier) ?? []), n]);
       }
 
+      // pass 1 — lay out every node's position so connectors can find their endpoints
+      const pos = new Map<string, { x: number; y: number }>();
       byTier.forEach((tierNodes, tier) => {
         tierNodes.forEach((node, i) => {
           const perRow = tierNodes.length;
           const x = cx + (colW - 12) / 2 - (perRow * (NODE + 8) - 8) / 2 + i * (NODE + 8);
           const y = top + (tier - 1) * rowH;
-          this.drawNode(node, x, y);
+          pos.set(node.id, { x, y });
+        });
+      });
+
+      // pass 2 — arcane connectors from prerequisite to dependent, lit teal once invested
+      const links = this.scene.add.graphics();
+      for (const node of colNodes) {
+        if (!node.req) continue;
+        const a = pos.get(node.req);
+        const b = pos.get(node.id);
+        if (!a || !b) continue;
+        const lit = (this.skills[node.req] ?? 0) > 0;
+        const ax = a.x + NODE / 2, ay = a.y + NODE;
+        const bx = b.x + NODE / 2, by = b.y;
+        const midY = by - 7;
+        links.lineStyle(lit ? 2 : 1.5, lit ? 0xcfc6d6 : 0x352c40, lit ? 0.7 : 0.35);
+        links.beginPath();
+        links.moveTo(ax, ay); links.lineTo(ax, midY); links.lineTo(bx, midY); links.lineTo(bx, by);
+        links.strokePath();
+        links.fillStyle(lit ? 0xcfc6d6 : 0x352c40, lit ? 0.85 : 0.45);
+        links.fillCircle(bx, midY, 2); // a small node at the elbow
+      }
+      this.root.add(links);
+
+      // pass 3 — the nodes themselves, on top of their connectors
+      byTier.forEach((tierNodes) => {
+        tierNodes.forEach((node) => {
+          const p = pos.get(node.id)!;
+          this.drawNode(node, p.x, p.y);
         });
       });
     });
@@ -1234,13 +1250,13 @@ export class SkillPanel {
     const locked = rank === 0 && !canAlloc;
 
     const strokeColor = maxed
-      ? 0xd8b13a
+      ? 0xc9a44a // muted gold — mastered (the one sanctioned pop)
       : canAlloc
-        ? 0x40c060
+        ? 0xcfc6d6 // bone — available to learn
         : rank > 0
-          ? 0x8a7a5a
-          : 0x342a44;
-    const fillColor = node.type === "ultimate" ? 0x241016 : 0x171226;
+          ? 0x8a8494 // dim pewter — invested
+          : 0x35323c; // near-dark — locked
+    const fillColor = node.type === "ultimate" ? 0x1c1720 : 0x16141c;
     const bg = this.scene.add
       .rectangle(x, y, NODE, NODE, fillColor, locked ? 0.6 : 0.95)
       .setOrigin(0)
@@ -1251,7 +1267,7 @@ export class SkillPanel {
     const glyph = this.scene.add
       .text(x + NODE / 2, y + NODE / 2 - 4, node.type === "ultimate" ? "☠" : node.name.slice(0, 2).toUpperCase(), {
         fontFamily: "monospace", fontSize: node.type === "ultimate" ? "18px" : "14px", fontStyle: "bold",
-        color: locked ? "#4a4a56" : node.type === "ultimate" ? "#ff8033" : node.type === "passive" ? "#9fdc9f" : "#e8d8a8",
+        color: locked ? "#4a4a56" : node.type === "ultimate" ? "#d0a050" : node.type === "passive" ? "#a8a2b4" : "#cfc6d6",
       })
       .setOrigin(0.5);
     this.root.add(glyph);
