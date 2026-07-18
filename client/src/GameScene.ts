@@ -887,6 +887,25 @@ export class GameScene extends Phaser.Scene {
         this.cameras.main.shake(140, 0.005);
         this.sfx.hit();
       });
+      room.onMessage("rendfx", (msg: any) => {
+        // a Rend wound — a spray of blood that lingers as the bleed ticks
+        const s = worldToScreen(msg.x, msg.y);
+        for (let i = 0; i < 7; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const drop = this.add
+            .circle(s.x, s.y - 6, 2 + Math.random() * 2, 0xb01824, 0.9)
+            .setDepth(s.y + 3);
+          this.tweens.add({
+            targets: drop,
+            x: s.x + Math.cos(a) * (10 + Math.random() * 16),
+            y: s.y - 6 + Math.sin(a) * (8 + Math.random() * 12) + 10,
+            alpha: 0,
+            duration: 400 + Math.random() * 250,
+            onComplete: () => drop.destroy(),
+          });
+        }
+        this.sfx.hit();
+      });
       room.onMessage("hexwarn", (msg: any) => {
         // a Hexer is sealing a curse-circle where you stand — a purple ring that closes toward the seal
         const s = worldToScreen(msg.x, msg.y);

@@ -172,6 +172,10 @@ import {
   BLEED_FRACTION,
   BLEED_TICKS,
   BLEED_TICK_MS,
+  CLEAVE_RANGE,
+  REND_RANGE,
+  REND_BLEED_FRACTION,
+  REND_BLEED_TICKS,
   MANA_SHIELD_FRACTION,
   DEEP_POCKETS_CHANCE,
   HOARDER_HEAL_PER_GOLD,
@@ -3017,6 +3021,59 @@ export class DungeonRoom extends Room<DungeonState> {
           }
           this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
         });
+        break;
+      }
+
+      case "cleave": {
+        // a wide forward sweep — everything in the front arc takes the blow
+        this.broadcast("swing", { id: sessionId, x: p.x, y: p.y, dirX, dirY });
+        const hits: string[] = [];
+        this.state.monsters.forEach((m, id) => {
+          const def = MONSTERS[m.kind as MonsterKind];
+          const d = Math.hypot(m.x - p.x, m.y - p.y);
+          if (d > CLEAVE_RANGE + def.radius) return;
+          const dd = d || 1;
+          // front arc only (dot ≥ -0.2 ≈ a touch past 90° each side); point-blank always counts
+          if (d > 20 && ((m.x - p.x) / dd) * dirX + ((m.y - p.y) / dd) * dirY < -0.2) return;
+          hits.push(id);
+        });
+        if (hits.length === 0) { succeeded = false; break; }
+        hits.forEach((id) => {
+          const m = this.state.monsters.get(id);
+          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
+        });
+        break;
+      }
+
+      case "rend": {
+        // a wounding strike on the nearest foe in front: a burst now, then a heavy bleed
+        let bestId = "";
+        let bestM: Monster | null = null;
+        let bestD = Infinity;
+        this.state.monsters.forEach((m, id) => {
+          const def = MONSTERS[m.kind as MonsterKind];
+          const d = Math.hypot(m.x - p.x, m.y - p.y);
+          if (d > REND_RANGE + def.radius) return;
+          const dd = d || 1;
+          if (d > 20 && ((m.x - p.x) / dd) * dirX + ((m.y - p.y) / dd) * dirY < 0.3) return;
+          if (d < bestD) { bestD = d; bestId = id; bestM = m; }
+        });
+        if (!bestM) { succeeded = false; break; }
+        this.broadcast("swing", { id: sessionId, x: p.x, y: p.y, dirX, dirY });
+        const dmg = this.outgoingDamage(p, atk.dmg, mult);
+        this.damageMonster(bestId, bestM, dmg, sessionId);
+        const wounded = this.state.monsters.get(bestId);
+        if (wounded && wounded.hp > 0) {
+          // a fresh Rend overwrites a weaker one; never shortens an existing deeper wound
+          const perTick = Math.max(1, Math.round((dmg * REND_BLEED_FRACTION) / REND_BLEED_TICKS));
+          if (perTick >= wounded.bleedDmg) {
+            wounded.bleedDmg = perTick;
+            wounded.bleedTicksLeft = REND_BLEED_TICKS;
+            wounded.bleedNextAt = now + BLEED_TICK_MS;
+            wounded.bleedBy = sessionId;
+          }
+          this.broadcast("rendfx", { id: bestId, x: wounded.x, y: wounded.y });
+        }
         break;
       }
 

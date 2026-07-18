@@ -1996,6 +1996,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_skin", name: "Skin of Kragmar", desc: "Weather, wars, and worse have tried", tree: "War Cries", tier: 5, type: "passive", maxRank: 12, passive: { armor: 4, allRes: 1 } },
     { id: "t5_voice", name: "Voice of War", desc: "Your shout arrives before your axe", tree: "War Cries", tier: 5, type: "passive", maxRank: 12, passive: { atkSpd: 2, dmg: 1 } },
     { id: "ks_immovable", name: "Immovable", desc: "The mountain does not flinch, and cannot be moved", tree: "Might", tier: 5, type: "passive", maxRank: 1, keystone: "Cannot be chilled or slowed" },
+    // Carnage — the bleed & sustain brawler line (a hungrier, bloodier path than Might's burst)
+    { id: "cleave", name: "Cleave", desc: "One swing, the whole front rank", tree: "Carnage", tier: 1, type: "active", maxRank: 5, mana: 7, cooldownMs: 1600, baseMult: 0.85, rankMult: 0.12, synergies: [{ from: "bash", pct: 6 }] },
+    { id: "bloodlust", name: "Bloodlust", desc: "The smell of it quickens everything", tree: "Carnage", tier: 1, type: "passive", maxRank: 10, passive: { lifeSteal: 1, atkSpd: 3 } },
+    { id: "rend", name: "Rend", desc: "A wound that keeps on giving", tree: "Carnage", tier: 2, type: "active", maxRank: 5, req: "cleave", mana: 9, cooldownMs: 3000, baseMult: 1.1, rankMult: 0.18, synergies: [{ from: "cleave", pct: 8 }, { from: "bash", pct: 4 }] },
+    { id: "warpaint", name: "War Paint", desc: "Wear their blood where they can see it", tree: "Carnage", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 5, crit: 1 } },
+    { id: "t5_carnage", name: "Red Harvest", desc: "The field feeds the reaper", tree: "Carnage", tier: 5, type: "passive", maxRank: 12, passive: { lifeSteal: 1, dmgPct: 3 } },
   ],
   rogue: [
     { id: "multishot", name: "Multishot", desc: "One draw, a fan of death", tree: "Archery", tier: 1, type: "active", maxRank: 5, mana: 10, cooldownMs: 2000, baseMult: 0.9, rankMult: 0.1 },
@@ -2519,6 +2525,11 @@ export const GIANTSLAYER_MULT = 1.25;
 export const BLEED_FRACTION = 0.45; // of the triggering hit, over 3 ticks
 export const BLEED_TICKS = 3;
 export const BLEED_TICK_MS = 1000;
+// Barbarian "Carnage" tree — a bleed & sustain brawling line (3rd tree)
+export const CLEAVE_RANGE = 95; // forward sweep reach
+export const REND_RANGE = 72; // the wounding strike's reach
+export const REND_BLEED_FRACTION = 0.9; // of the strike, bled out over its ticks (reuses BLEED_TICK_MS cadence)
+export const REND_BLEED_TICKS = 4;
 export const MANA_SHIELD_FRACTION = 0.3;
 export const DEEP_POCKETS_CHANCE = 0.25;
 export const HOARDER_HEAL_PER_GOLD = 0.1;
