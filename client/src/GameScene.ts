@@ -124,7 +124,7 @@ interface ProjectileEntity {
 const PROJ_TRAIL: Record<string, number> = {
   fireball: 0xff8a33, orb: 0x8ad0ff, thorn: 0x5fce7f, hammer: 0xffe08a,
   bossarrow: 0xff7070, mobarrow: 0xd8a080, quill: 0x9a7a4a, hexbolt: 0xb87aff,
-  bloodstar: 0xff7090, bone: 0xe8e4d4,
+  bloodstar: 0xff7090, bone: 0xe8e4d4, frostbolt: 0x8ec8f0,
 };
 
 interface LootEntity {
@@ -3247,6 +3247,12 @@ export class GameScene extends Phaser.Scene {
       container.add(this.add.circle(0, -12, 7, 0xd82848, 0.35));
       container.add(this.add.circle(0, -12, 3.5, 0xff7090));
       this.sfx.fireball();
+    } else if (proj.kind === "frostbolt") {
+      // a splinter of deep cold — pale blue crystal with a frosty halo
+      container.add(this.add.circle(0, -12, 6, 0x8ec8f0, 0.3));
+      rotatable = this.add.rectangle(0, -12, 11, 3, 0xdff2ff).setStrokeStyle(1, 0x8ec8f0, 0.9);
+      container.add(rotatable);
+      this.sfx.zap();
     } else {
       rotatable = this.add.rectangle(0, -12, 14, 3, 0xe8d9a0);
       container.add(rotatable);

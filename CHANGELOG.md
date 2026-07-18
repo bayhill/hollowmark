@@ -761,3 +761,15 @@ Two foundations for deeper builds:
 - **Barbarian gets a third tree — Carnage.** A bleed-and-sustain brawler path, distinct from Might (burst) and War Cries (support): **Cleave** (a wide forward sweep — the front rank at once), **Rend** (a strike that opens a heavy 4-tick bleed, reusing the Bloodletter wound system; a fresh Rend refreshes but never shortens a deeper wound), plus **Bloodlust** (lifesteal/attack-speed), **War Paint** (dmg/crit), and **Red Harvest** (Transcendence lifesteal). Rend synergizes off both Cleave and Bash — the new web in action. New `rendfx` blood spray on the client.
 
 The client skill panel already lays out dynamically by tree column × tier row, so the third column appeared with no layout work. **Verification:** typecheck ×2 + client build + full `npm run smoke` green (incl. the multi-source stacking assertion). Remaining classes' third trees follow in subsequent slices.
+
+## Extensive skill system, slice 2 — third trees for the other five classes
+
+Every class now has a third skill tree — a distinct third build archetype — completing the expansion (the trees went 2→3 across the board; ~85 skill nodes → 111). Each new tree adds two actives (built on existing primitives, so no new combat systems) plus passives, wired into the multi-source synergy web:
+
+- **Rogue — Venom.** Area denial beside Archery and Shadow: **Caltrops** (a slowing, wounding trap field) and **Noxious Cloud** (a lingering poison pool). Both ride the ground-hazard system; the client's `poolfx` renders them.
+- **Sorcerer — Winter.** A dedicated cold spec: **Ice Shard** (a fast, cheap chilling bolt — a new `frostbolt` projectile) and **Blizzard** (a lingering cold storm), plus **Cold Mastery** (flat penetration — the answer to resistant foes).
+- **Paladin — Retribution.** Holy-fire offense: **Holy Fire** (a self-centered nova to clear crowds) and **Holy Wrath** (a heavy single strike with holy splash). Reuses the `classfx` "prayer" ring.
+- **Necromancer — Blood Magic.** A self-sustaining caster line (distinct from the existing Poison & Bone): **Blood Spear** (a lance skewering a whole line, on the pierce primitive) and **Blood Boil** (an AoE burst), with lifesteal passives throughout.
+- **Druid — Spirits.** A summoner/beastmaster path: **Spirit Wolf** (call one to your side) and **Call the Pack** (the whole pack at once), on the pet system with a per-druid cap.
+
+The synergy web threads through all of them — e.g. Noxious off Caltrops+Toxin, Blizzard off Ice Shard, Holy Wrath off Holy Fire+Smite, Blood Boil off Blood Spear+Wither, Call the Pack off Spirit Wolf. The client skill panel lays out by tree column × tier row, so every third column appeared with no layout work. **Verification:** typecheck ×2 + client build + full `npm run smoke` green, with a new data assertion that every class fields exactly three trees; the 111-node battery validates every synergy source, requirement, and gate.

@@ -1890,6 +1890,9 @@ async function main() {
         if (n.type === "passive" && !n.passive && !n.keystone) throw new Error(`${cls}/${n.id} is a passive without stats`);
         if (n.keystone && n.passive) throw new Error(`${cls}/${n.id} is a keystone with a stat block — pick one`);
       }
+      // every class fields exactly three skill trees (two originals + the new archetype)
+      const treeCount = new Set(nodes.map((n) => n.tree)).size;
+      if (treeCount !== 3) throw new Error(`${cls} should have 3 skill trees, has ${treeCount}`);
       // exactly one keystone per class, single-rank, at the Transcendence tier
       const keys = nodes.filter((n) => n.keystone);
       if (keys.length !== 1) throw new Error(`${cls} should have exactly 1 keystone, has ${keys.length}`);

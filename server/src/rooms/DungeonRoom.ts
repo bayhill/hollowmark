@@ -176,6 +176,29 @@ import {
   REND_RANGE,
   REND_BLEED_FRACTION,
   REND_BLEED_TICKS,
+  CALTROPS_RANGE,
+  CALTROPS_RADIUS,
+  CALTROPS_MS,
+  CALTROPS_MULT,
+  NOXIOUS_RANGE,
+  NOXIOUS_RADIUS,
+  NOXIOUS_MS,
+  NOXIOUS_MULT,
+  ICESHARD_SPEED,
+  ICESHARD_CHILL_MS,
+  BLIZZARD_RANGE,
+  BLIZZARD_RADIUS,
+  BLIZZARD_MS,
+  BLIZZARD_MULT,
+  HOLYFIRE_RADIUS,
+  HOLYWRATH_RANGE,
+  HOLYWRATH_SPLASH,
+  BLOODSPEAR_LENGTH,
+  BLOODSPEAR_WIDTH,
+  BLOODBOIL_RANGE,
+  BLOODBOIL_RADIUS,
+  SPIRIT_CAP,
+  SPIRITPACK_COUNT,
   MANA_SHIELD_FRACTION,
   DEEP_POCKETS_CHANCE,
   HOARDER_HEAL_PER_GOLD,
@@ -3093,6 +3116,31 @@ export class DungeonRoom extends Room<DungeonState> {
         break;
       }
 
+      case "iceshard": {
+        // a fast, cheap frost bolt that chills — the Winter spec's bread and butter
+        const proj = new Projectile();
+        proj.x = p.x;
+        proj.y = p.y;
+        proj.kind = "frostbolt";
+        proj.vx = dirX * ICESHARD_SPEED;
+        proj.vy = dirY * ICESHARD_SPEED;
+        proj.bornAt = now;
+        proj.owner = sessionId;
+        proj.mult = mult;
+        proj.chillMs = ICESHARD_CHILL_MS + (rank - 1) * 150;
+        this.state.projectiles.set(`proj_${this.nextId++}`, proj);
+        break;
+      }
+
+      case "blizzard": {
+        // a lingering storm of cold over the target ground — damages and chills what stands in it
+        const cx = p.x + dirX * Math.min(len, BLIZZARD_RANGE);
+        const cy = p.y + dirY * Math.min(len, BLIZZARD_RANGE);
+        this.hazards.push({ ax: cx, ay: cy, bx: cx, by: cy, width: BLIZZARD_RADIUS, until: now + BLIZZARD_MS, nextTick: now, owner: sessionId, mult: mult * BLIZZARD_MULT, chill: true });
+        this.broadcast("poolfx", { x: cx, y: cy, r: BLIZZARD_RADIUS, ms: BLIZZARD_MS, hue: 0x8ec8f0 });
+        break;
+      }
+
       case "coldarrow": {
         const proj = new Projectile();
         proj.x = p.x;
@@ -3192,6 +3240,50 @@ export class DungeonRoom extends Room<DungeonState> {
         this.broadcast("swing", { id: sessionId, x: p.x, y: p.y, dirX, dirY });
         target.stunUntil = now + 800;
         this.damageMonster(bestId, target, this.outgoingDamage(p, atk.type === "melee" ? atk.dmg : [9, 15], mult), sessionId);
+        break;
+      }
+
+      case "holyfire": {
+        // a nova of holy flame around the paladin — the crowd-clear of the Retribution line
+        this.broadcast("classfx", { kind: "prayer", x: p.x, y: p.y, r: HOLYFIRE_RADIUS });
+        const hits: string[] = [];
+        this.state.monsters.forEach((m, id) => {
+          const def = MONSTERS[m.kind as MonsterKind];
+          if (Math.hypot(m.x - p.x, m.y - p.y) <= HOLYFIRE_RADIUS + def.radius) hits.push(id);
+        });
+        hits.forEach((id) => {
+          const m = this.state.monsters.get(id);
+          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.type === "melee" ? atk.dmg : [9, 15], mult), sessionId);
+        });
+        break;
+      }
+
+      case "holywrath": {
+        // a heavy strike on the nearest foe in front, holy light spilling to those beside it
+        let bestId = "";
+        let bestM: Monster | null = null;
+        let bestD = Infinity;
+        this.state.monsters.forEach((m, id) => {
+          const def = MONSTERS[m.kind as MonsterKind];
+          const d = Math.hypot(m.x - p.x, m.y - p.y);
+          if (d > HOLYWRATH_RANGE + def.radius) return;
+          const dd = d || 1;
+          if (d > 20 && ((m.x - p.x) / dd) * dirX + ((m.y - p.y) / dd) * dirY < 0.3) return;
+          if (d < bestD) { bestD = d; bestId = id; bestM = m; }
+        });
+        if (!bestM) { succeeded = false; break; }
+        const target: Monster = bestM;
+        this.broadcast("swing", { id: sessionId, x: p.x, y: p.y, dirX, dirY });
+        this.damageMonster(bestId, target, this.outgoingDamage(p, atk.type === "melee" ? atk.dmg : [9, 15], mult), sessionId);
+        this.broadcast("classfx", { kind: "prayer", x: target.x, y: target.y, r: HOLYWRATH_SPLASH });
+        const splash: string[] = [];
+        this.state.monsters.forEach((m, id) => {
+          if (id !== bestId && Math.hypot(m.x - target.x, m.y - target.y) <= HOLYWRATH_SPLASH) splash.push(id);
+        });
+        splash.forEach((id) => {
+          const m = this.state.monsters.get(id);
+          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.type === "melee" ? atk.dmg : [9, 15], mult * 0.5), sessionId);
+        });
         break;
       }
 
@@ -3304,6 +3396,46 @@ export class DungeonRoom extends Room<DungeonState> {
         break;
       }
 
+      case "bloodspear": {
+        // a lance of blood that skewers everything along a line
+        const ax = dirX;
+        const ay = dirY;
+        const ex = p.x + ax * BLOODSPEAR_LENGTH;
+        const ey = p.y + ay * BLOODSPEAR_LENGTH;
+        this.broadcast("piercefx", { fromX: p.x, fromY: p.y, toX: ex, toY: ey });
+        const hits: string[] = [];
+        this.state.monsters.forEach((m, id) => {
+          const def = MONSTERS[m.kind as MonsterKind];
+          const t = (m.x - p.x) * ax + (m.y - p.y) * ay;
+          if (t < 0 || t > BLOODSPEAR_LENGTH) return;
+          const px = p.x + ax * t;
+          const py = p.y + ay * t;
+          if (Math.hypot(m.x - px, m.y - py) <= BLOODSPEAR_WIDTH / 2 + def.radius) hits.push(id);
+        });
+        hits.forEach((id) => {
+          const m = this.state.monsters.get(id);
+          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
+        });
+        break;
+      }
+
+      case "bloodboil": {
+        // bring the blood of a whole knot of foes to a boil
+        const cx = p.x + dirX * Math.min(len, BLOODBOIL_RANGE);
+        const cy = p.y + dirY * Math.min(len, BLOODBOIL_RANGE);
+        this.broadcast("poolfx", { x: cx, y: cy, r: BLOODBOIL_RADIUS, ms: 520, hue: 0xb01824 });
+        const hits: string[] = [];
+        this.state.monsters.forEach((m, id) => {
+          const def = MONSTERS[m.kind as MonsterKind];
+          if (Math.hypot(m.x - cx, m.y - cy) <= BLOODBOIL_RADIUS + def.radius) hits.push(id);
+        });
+        hits.forEach((id) => {
+          const m = this.state.monsters.get(id);
+          if (m) this.damageMonster(id, m, this.outgoingDamage(p, atk.dmg, mult), sessionId);
+        });
+        break;
+      }
+
       case "decrepify": {
         const cx = p.x + dirX * Math.min(len, 240);
         const cy = p.y + dirY * Math.min(len, 240);
@@ -3383,6 +3515,46 @@ export class DungeonRoom extends Room<DungeonState> {
           width: 22, until: now + 2200, nextTick: now, owner: sessionId, mult,
         });
         this.broadcast("firewallfx", { ax: p.x + dirX * 30, ay: p.y + dirY * 30, bx: cx, by: cy, ms: 2200 });
+        break;
+      }
+
+      case "spiritwolf": {
+        // call a single spirit wolf to fight beside you (up to the pack cap)
+        let mine = 0;
+        this.state.pets.forEach((pet) => { if (pet.owner === sessionId) mine++; });
+        if (mine >= SPIRIT_CAP) { succeeded = false; break; }
+        const pet = new Pet();
+        const pos = this.scatter(p.x, p.y);
+        pet.x = pos.x;
+        pet.y = pos.y;
+        pet.owner = sessionId;
+        pet.kind = "wolf";
+        pet.dmg = Math.max(1, this.outgoingDamage(p, [8, 14], mult));
+        pet.until = now + PET_DURATION_MS;
+        this.state.pets.set(`pet_${this.nextId++}`, pet);
+        this.broadcast("classfx", { kind: "raise", x: pos.x, y: pos.y, r: 40 });
+        break;
+      }
+
+      case "spiritpack": {
+        // call the whole pack at once, up to a slightly higher cap
+        let mine = 0;
+        this.state.pets.forEach((pet) => { if (pet.owner === sessionId) mine++; });
+        let raised = 0;
+        for (let i = 0; i < SPIRITPACK_COUNT && mine + raised < SPIRIT_CAP + 2; i++) {
+          const pet = new Pet();
+          const pos = this.scatter(p.x, p.y);
+          pet.x = pos.x;
+          pet.y = pos.y;
+          pet.owner = sessionId;
+          pet.kind = "wolf";
+          pet.dmg = Math.max(1, this.outgoingDamage(p, [9, 15], mult));
+          pet.until = now + PET_DURATION_MS;
+          this.state.pets.set(`pet_${this.nextId++}`, pet);
+          raised++;
+        }
+        if (raised === 0) { succeeded = false; break; }
+        this.broadcast("classfx", { kind: "raise", x: p.x, y: p.y, r: 44 });
         break;
       }
 
@@ -3503,6 +3675,24 @@ export class DungeonRoom extends Room<DungeonState> {
             this.spawnProjectile(p, sessionId, "arrow", Math.cos(a), Math.sin(a), atk.speed, mult);
           }
         }
+        break;
+      }
+
+      case "caltrops": {
+        // seed a slowing, wounding trap field at the chosen ground
+        const cx = p.x + dirX * Math.min(len, CALTROPS_RANGE);
+        const cy = p.y + dirY * Math.min(len, CALTROPS_RANGE);
+        this.hazards.push({ ax: cx, ay: cy, bx: cx, by: cy, width: CALTROPS_RADIUS, until: now + CALTROPS_MS, nextTick: now, owner: sessionId, mult: mult * CALTROPS_MULT, chill: true });
+        this.broadcast("poolfx", { x: cx, y: cy, r: CALTROPS_RADIUS, ms: CALTROPS_MS, hue: 0x9aa07a });
+        break;
+      }
+
+      case "noxious": {
+        // lob a lingering poison cloud over the target ground — bigger, no slow, more damage
+        const cx = p.x + dirX * Math.min(len, NOXIOUS_RANGE);
+        const cy = p.y + dirY * Math.min(len, NOXIOUS_RANGE);
+        this.hazards.push({ ax: cx, ay: cy, bx: cx, by: cy, width: NOXIOUS_RADIUS, until: now + NOXIOUS_MS, nextTick: now, owner: sessionId, mult: mult * NOXIOUS_MULT });
+        this.broadcast("poolfx", { x: cx, y: cy, r: NOXIOUS_RADIUS, ms: NOXIOUS_MS, hue: 0x7ac850 });
         break;
       }
 

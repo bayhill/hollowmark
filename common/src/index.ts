@@ -894,6 +894,7 @@ export const PROJECTILE_CLASS: Record<string, ClassName> = {
   arrow: "rogue",
   icearrow: "rogue",
   fireball: "sorcerer",
+  frostbolt: "sorcerer",
   bone: "necromancer",
   thorn: "druid",
   hammer: "paladin",
@@ -2018,6 +2019,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_nowhere", name: "Nowhere Twice", desc: "They aim where you were", tree: "Shadow", tier: 5, type: "passive", maxRank: 12, passive: { dodge: 2, moveSpd: 1 } },
     { id: "t5_cuts", name: "A Thousand Cuts", desc: "None of them individually matters. That's the trick.", tree: "Shadow", tier: 5, type: "passive", maxRank: 12, passive: { dmg: 2, dmgPct: 2 } },
     { id: "ks_lethality", name: "Lethality", desc: "When you find the gap, drive everything through it", tree: "Shadow", tier: 5, type: "passive", maxRank: 1, keystone: "Critical hits deal ×2.5 instead of ×2" },
+    // Venom — traps & attrition, a patient area-denial path beside Archery (burst) and Shadow (mobility)
+    { id: "caltrops", name: "Caltrops", desc: "The ground itself turns on them", tree: "Venom", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 3500, baseMult: 0.4, rankMult: 0.06, synergies: [{ from: "multishot", pct: 4 }] },
+    { id: "toxin", name: "Toxin", desc: "A little something on every edge", tree: "Venom", tier: 1, type: "passive", maxRank: 10, passive: { dmg: 2, crit: 1 } },
+    { id: "noxious", name: "Noxious Cloud", desc: "A breath the whole room comes to share", tree: "Venom", tier: 2, type: "active", maxRank: 5, req: "caltrops", mana: 12, cooldownMs: 5000, baseMult: 0.5, rankMult: 0.08, synergies: [{ from: "caltrops", pct: 8 }, { from: "toxin", pct: 4 }] },
+    { id: "gangrene", name: "Gangrene", desc: "It spreads faster than they can run", tree: "Venom", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 5, crit: 1 } },
+    { id: "t5_venom", name: "The Long Poison", desc: "Patience is the deadliest toxin", tree: "Venom", tier: 5, type: "passive", maxRank: 12, passive: { dmg: 2, dmgPct: 3 } },
   ],
   sorcerer: [
     { id: "chain", name: "Chain Lightning", desc: "Lightning that hungers for company", tree: "Elements", tier: 1, type: "active", maxRank: 5, mana: 14, cooldownMs: 2500, baseMult: 1.0, rankMult: 0.15, synergies: [{ from: "frostnova", pct: 6 }] },
@@ -2033,6 +2040,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_well", name: "Bottomless Well", desc: "The well was never the limit. You were.", tree: "Arcane", tier: 5, type: "passive", maxRank: 12, passive: { maxMana: 10, manaRegen: 0.5 } },
     { id: "t5_dilation", name: "Time Dilation", desc: "Everyone else is simply slow", tree: "Arcane", tier: 5, type: "passive", maxRank: 12, passive: { cdr: 1, atkSpd: 1 } },
     { id: "ks_unraveling", name: "Unraveling", desc: "Every ward is just a knot you haven't undone yet", tree: "Elements", tier: 5, type: "passive", maxRank: 1, keystone: "Your attacks ignore an extra 25% of monster resistance" },
+    // Winter — a dedicated cold spec beside Elements (mixed) and Arcane (utility): chill, control, attrition
+    { id: "iceshard", name: "Ice Shard", desc: "A splinter of the deep cold", tree: "Winter", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 700, baseMult: 0.8, rankMult: 0.14, synergies: [{ from: "blizzard", pct: 5 }] },
+    { id: "frostarmor", name: "Frost Armor", desc: "Cold enough to turn a blade", tree: "Winter", tier: 1, type: "passive", maxRank: 10, passive: { armor: 2, allRes: 1 } },
+    { id: "blizzard", name: "Blizzard", desc: "Bring the whole storm down on them", tree: "Winter", tier: 3, type: "active", maxRank: 5, req: "iceshard", mana: 20, cooldownMs: 7000, baseMult: 0.55, rankMult: 0.1, synergies: [{ from: "iceshard", pct: 8 }] },
+    { id: "coldmastery", name: "Cold Mastery", desc: "Find the cold that lives in everything", tree: "Winter", tier: 3, type: "passive", maxRank: 8, passive: { penetration: 3 } },
+    { id: "t5_winter", name: "Endless Winter", desc: "The season that forgot to turn", tree: "Winter", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 4, crit: 1 } },
   ],
   paladin: [
     { id: "smite", name: "Smite", desc: "A shield-blow that leaves them reeling", tree: "Combat", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 1400, baseMult: 1.4, rankMult: 0.2 },
@@ -2048,6 +2061,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_aegisfaith", name: "Aegis of Faith", desc: "Fire, frost, and lightning read the same scripture", tree: "Auras", tier: 5, type: "passive", maxRank: 12, passive: { allRes: 2 } },
     { id: "t5_everlasting", name: "Light Everlasting", desc: "The lamp that outlasts the night", tree: "Auras", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 10, manaRegen: 0.3 } },
     { id: "ks_bulwark", name: "Bulwark", desc: "Faith is a wall, and you are well-built", tree: "Combat", tier: 5, type: "passive", maxRank: 1, keystone: "While above 60% life, take 20% less damage" },
+    // Retribution — a holy-fire offense beside Combat (melee) and Auras (support): burn crowds, smash the lone foe
+    { id: "holyfire", name: "Holy Fire", desc: "Burn the wicked from where you stand", tree: "Retribution", tier: 1, type: "active", maxRank: 5, mana: 9, cooldownMs: 2200, baseMult: 0.7, rankMult: 0.12, synergies: [{ from: "smite", pct: 5 }] },
+    { id: "conviction", name: "Conviction", desc: "Doubt is a luxury of the living", tree: "Retribution", tier: 1, type: "passive", maxRank: 10, passive: { dmgPct: 3, allRes: 1 } },
+    { id: "holywrath", name: "Holy Wrath", desc: "One blow, and the light behind it", tree: "Retribution", tier: 3, type: "active", maxRank: 5, req: "holyfire", mana: 14, cooldownMs: 3200, baseMult: 1.6, rankMult: 0.24, synergies: [{ from: "holyfire", pct: 7 }, { from: "smite", pct: 4 }] },
+    { id: "zealotry", name: "Zealotry", desc: "Faith repaid in kind", tree: "Retribution", tier: 3, type: "passive", maxRank: 10, passive: { thorns: 2, dmgPct: 2 } },
+    { id: "t5_retribution", name: "Wrath Everlasting", desc: "The verdict was passed long ago", tree: "Retribution", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 4, atkSpd: 1 } },
   ],
   necromancer: [
     { id: "teeth", name: "Teeth", desc: "A fan of splintered bone", tree: "Poison & Bone", tier: 1, type: "active", maxRank: 5, mana: 9, cooldownMs: 2000, baseMult: 0.6, rankMult: 0.08 },
@@ -2063,6 +2082,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_pact", name: "Deathlord's Pact", desc: "Death signed. You witnessed.", tree: "Summoning", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 8, manaRegen: 0.4 } },
     { id: "t5_legion", name: "The Grave Legion", desc: "The dead do not desert", tree: "Summoning", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 3, maxMana: 8 } },
     { id: "ks_siphon", name: "Soul Siphon", desc: "Every death feeds the one who dealt it", tree: "Poison & Bone", tier: 5, type: "passive", maxRank: 1, keystone: "Each kill restores 3% of your life and mana" },
+    // Blood Magic — a self-sustaining caster line beside Poison & Bone (attrition) and Summoning (pets)
+    { id: "bloodspear", name: "Blood Spear", desc: "A lance drawn from the wound of the world", tree: "Blood Magic", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 1200, baseMult: 0.9, rankMult: 0.14, synergies: [{ from: "teeth", pct: 5 }] },
+    { id: "bloodwarden", name: "Blood Warden", desc: "The blood remembers who spilled it", tree: "Blood Magic", tier: 1, type: "passive", maxRank: 10, passive: { maxHp: 8, lifeSteal: 1 } },
+    { id: "bloodboil", name: "Blood Boil", desc: "Bring the blood in them to a rolling boil", tree: "Blood Magic", tier: 3, type: "active", maxRank: 5, req: "bloodspear", mana: 18, cooldownMs: 5500, baseMult: 1.0, rankMult: 0.16, synergies: [{ from: "bloodspear", pct: 8 }, { from: "decrepify", pct: 5 }] },
+    { id: "hemorrhage", name: "Hemorrhage", desc: "Some wounds simply refuse to close", tree: "Blood Magic", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 5, lifeSteal: 1 } },
+    { id: "t5_sanguine", name: "Sanguine Ascendant", desc: "Master of the red hour", tree: "Blood Magic", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 4, maxHp: 6 } },
   ],
   druid: [
     { id: "firestorm", name: "Firestorm", desc: "Ribbons of flame race along the ground", tree: "Elemental", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 2500, baseMult: 0.45, rankMult: 0.08 },
@@ -2078,6 +2103,12 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_weald", name: "Heart of the Weald", desc: "Older than the town, older than the war", tree: "Wild", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 12 } },
     { id: "t5_oldshape", name: "The Old Shape", desc: "The wolf remembers what you keep forgetting", tree: "Wild", tier: 5, type: "passive", maxRank: 12, passive: { atkSpd: 2, armor: 2 } },
     { id: "ks_primal", name: "Primal Fury", desc: "The shape was never a costume — it is what you are", tree: "Wild", tier: 5, type: "passive", maxRank: 1, keystone: "In Werewolf form, +30% damage and attack speed" },
+    // Spirits — a summoner/beastmaster path beside Elemental (nukes) and Wild (shapeshift): fight with a pack
+    { id: "spiritwolf", name: "Spirit Wolf", desc: "Call one of the old pack to your side", tree: "Spirits", tier: 1, type: "active", maxRank: 5, mana: 10, cooldownMs: 4000, baseMult: 0.6, rankMult: 0.1 },
+    { id: "oaksage", name: "Oak Sage", desc: "An old spirit lends its stubborn vigor", tree: "Spirits", tier: 1, type: "passive", maxRank: 10, passive: { maxHp: 10, manaRegen: 0.3 } },
+    { id: "spiritpack", name: "Call the Pack", desc: "Not one wolf. All of them.", tree: "Spirits", tier: 3, type: "active", maxRank: 5, req: "spiritwolf", mana: 22, cooldownMs: 9000, baseMult: 0.7, rankMult: 0.1, synergies: [{ from: "spiritwolf", pct: 8 }] },
+    { id: "kinship", name: "Kinship", desc: "What you feel, the pack feels", tree: "Spirits", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 4, lifeSteal: 1 } },
+    { id: "t5_spirits", name: "The Endless Pack", desc: "The wood always has more sons", tree: "Spirits", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 10, dmgPct: 2 } },
   ],
 };
 
@@ -2530,6 +2561,34 @@ export const CLEAVE_RANGE = 95; // forward sweep reach
 export const REND_RANGE = 72; // the wounding strike's reach
 export const REND_BLEED_FRACTION = 0.9; // of the strike, bled out over its ticks (reuses BLEED_TICK_MS cadence)
 export const REND_BLEED_TICKS = 4;
+// Rogue "Venom" tree — traps & lingering poison (3rd tree; reuses the ground-hazard system)
+export const CALTROPS_RANGE = 200; // how far you can seed the trap field
+export const CALTROPS_RADIUS = 60;
+export const CALTROPS_MS = 4000;
+export const CALTROPS_MULT = 0.16; // per-tick fraction of the skill's damage
+export const NOXIOUS_RANGE = 240;
+export const NOXIOUS_RADIUS = 95;
+export const NOXIOUS_MS = 3600;
+export const NOXIOUS_MULT = 0.22;
+// Sorcerer "Winter" tree — a dedicated cold spec (3rd tree)
+export const ICESHARD_SPEED = 380; // a fast, spammable frost bolt
+export const ICESHARD_CHILL_MS = 1400; // chills what it strikes
+export const BLIZZARD_RANGE = 260;
+export const BLIZZARD_RADIUS = 100;
+export const BLIZZARD_MS = 3400;
+export const BLIZZARD_MULT = 0.24;
+// Paladin "Retribution" tree — holy-fire striker (3rd tree)
+export const HOLYFIRE_RADIUS = 92; // self-centered nova of holy flame
+export const HOLYWRATH_RANGE = 72; // the heavy single strike's reach
+export const HOLYWRATH_SPLASH = 62; // holy light spilling to those beside the victim
+// Necromancer "Blood Magic" tree — a self-sustaining caster line (3rd tree)
+export const BLOODSPEAR_LENGTH = 280; // a lance of congealed blood, through a line
+export const BLOODSPEAR_WIDTH = 34;
+export const BLOODBOIL_RANGE = 230;
+export const BLOODBOIL_RADIUS = 88; // the blood in them, brought to a boil
+// Druid "Spirits" tree — a summoner/beastmaster line (3rd tree; reuses the pet system)
+export const SPIRIT_CAP = 4; // how many spirit wolves one druid may keep at once
+export const SPIRITPACK_COUNT = 3; // wolves called by a single Call the Pack
 export const MANA_SHIELD_FRACTION = 0.3;
 export const DEEP_POCKETS_CHANCE = 0.25;
 export const HOARDER_HEAL_PER_GOLD = 0.1;
