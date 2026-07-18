@@ -1998,7 +1998,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_voice", name: "Voice of War", desc: "Your shout arrives before your axe", tree: "War Cries", tier: 5, type: "passive", maxRank: 12, passive: { atkSpd: 2, dmg: 1 } },
     { id: "ks_immovable", name: "Immovable", desc: "The mountain does not flinch, and cannot be moved", tree: "Might", tier: 5, type: "passive", maxRank: 1, keystone: "Cannot be chilled or slowed" },
     // Carnage — the bleed & sustain brawler line (a hungrier, bloodier path than Might's burst)
-    { id: "cleave", name: "Cleave", desc: "One swing, the whole front rank", tree: "Carnage", tier: 1, type: "active", maxRank: 5, mana: 7, cooldownMs: 1600, baseMult: 0.85, rankMult: 0.12, synergies: [{ from: "bash", pct: 6 }] },
+    { id: "cleave", name: "Cleave", desc: "One swing, the whole front rank", tree: "Carnage", tier: 1, type: "active", maxRank: 5, mana: 7, cooldownMs: 1600, baseMult: 0.7, rankMult: 0.1, synergies: [{ from: "bash", pct: 6 }] },
     { id: "bloodlust", name: "Bloodlust", desc: "The smell of it quickens everything", tree: "Carnage", tier: 1, type: "passive", maxRank: 10, passive: { lifeSteal: 1, atkSpd: 3 } },
     { id: "rend", name: "Rend", desc: "A wound that keeps on giving", tree: "Carnage", tier: 2, type: "active", maxRank: 5, req: "cleave", mana: 9, cooldownMs: 3000, baseMult: 1.1, rankMult: 0.18, synergies: [{ from: "cleave", pct: 8 }, { from: "bash", pct: 4 }] },
     { id: "warpaint", name: "War Paint", desc: "Wear their blood where they can see it", tree: "Carnage", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 5, crit: 1 } },
@@ -2041,7 +2041,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_dilation", name: "Time Dilation", desc: "Everyone else is simply slow", tree: "Arcane", tier: 5, type: "passive", maxRank: 12, passive: { cdr: 1, atkSpd: 1 } },
     { id: "ks_unraveling", name: "Unraveling", desc: "Every ward is just a knot you haven't undone yet", tree: "Elements", tier: 5, type: "passive", maxRank: 1, keystone: "Your attacks ignore an extra 25% of monster resistance" },
     // Winter — a dedicated cold spec beside Elements (mixed) and Arcane (utility): chill, control, attrition
-    { id: "iceshard", name: "Ice Shard", desc: "A splinter of the deep cold", tree: "Winter", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 700, baseMult: 0.8, rankMult: 0.14, synergies: [{ from: "blizzard", pct: 5 }] },
+    { id: "iceshard", name: "Ice Shard", desc: "A splinter of the deep cold", tree: "Winter", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 850, baseMult: 0.5, rankMult: 0.1, synergies: [{ from: "blizzard", pct: 5 }] },
     { id: "frostarmor", name: "Frost Armor", desc: "Cold enough to turn a blade", tree: "Winter", tier: 1, type: "passive", maxRank: 10, passive: { armor: 2, allRes: 1 } },
     { id: "blizzard", name: "Blizzard", desc: "Bring the whole storm down on them", tree: "Winter", tier: 3, type: "active", maxRank: 5, req: "iceshard", mana: 20, cooldownMs: 7000, baseMult: 0.55, rankMult: 0.1, synergies: [{ from: "iceshard", pct: 8 }] },
     { id: "coldmastery", name: "Cold Mastery", desc: "Find the cold that lives in everything", tree: "Winter", tier: 3, type: "passive", maxRank: 8, passive: { penetration: 3 } },
@@ -2064,7 +2064,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     // Retribution — a holy-fire offense beside Combat (melee) and Auras (support): burn crowds, smash the lone foe
     { id: "holyfire", name: "Holy Fire", desc: "Burn the wicked from where you stand", tree: "Retribution", tier: 1, type: "active", maxRank: 5, mana: 9, cooldownMs: 2200, baseMult: 0.7, rankMult: 0.12, synergies: [{ from: "smite", pct: 5 }] },
     { id: "conviction", name: "Conviction", desc: "Doubt is a luxury of the living", tree: "Retribution", tier: 1, type: "passive", maxRank: 10, passive: { dmgPct: 3, allRes: 1 } },
-    { id: "holywrath", name: "Holy Wrath", desc: "One blow, and the light behind it", tree: "Retribution", tier: 3, type: "active", maxRank: 5, req: "holyfire", mana: 14, cooldownMs: 3200, baseMult: 1.6, rankMult: 0.24, synergies: [{ from: "holyfire", pct: 7 }, { from: "smite", pct: 4 }] },
+    { id: "holywrath", name: "Holy Wrath", desc: "One blow, and the light behind it", tree: "Retribution", tier: 3, type: "active", maxRank: 5, req: "holyfire", mana: 14, cooldownMs: 3200, baseMult: 1.5, rankMult: 0.22, synergies: [{ from: "holyfire", pct: 7 }, { from: "smite", pct: 4 }] },
     { id: "zealotry", name: "Zealotry", desc: "Faith repaid in kind", tree: "Retribution", tier: 3, type: "passive", maxRank: 10, passive: { thorns: 2, dmgPct: 2 } },
     { id: "t5_retribution", name: "Wrath Everlasting", desc: "The verdict was passed long ago", tree: "Retribution", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 4, atkSpd: 1 } },
   ],
@@ -2083,7 +2083,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_legion", name: "The Grave Legion", desc: "The dead do not desert", tree: "Summoning", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 3, maxMana: 8 } },
     { id: "ks_siphon", name: "Soul Siphon", desc: "Every death feeds the one who dealt it", tree: "Poison & Bone", tier: 5, type: "passive", maxRank: 1, keystone: "Each kill restores 3% of your life and mana" },
     // Blood Magic — a self-sustaining caster line beside Poison & Bone (attrition) and Summoning (pets)
-    { id: "bloodspear", name: "Blood Spear", desc: "A lance drawn from the wound of the world", tree: "Blood Magic", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 1200, baseMult: 0.9, rankMult: 0.14, synergies: [{ from: "teeth", pct: 5 }] },
+    { id: "bloodspear", name: "Blood Spear", desc: "A lance drawn from the wound of the world", tree: "Blood Magic", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 1500, baseMult: 0.6, rankMult: 0.1, synergies: [{ from: "teeth", pct: 5 }] },
     { id: "bloodwarden", name: "Blood Warden", desc: "The blood remembers who spilled it", tree: "Blood Magic", tier: 1, type: "passive", maxRank: 10, passive: { maxHp: 8, lifeSteal: 1 } },
     { id: "bloodboil", name: "Blood Boil", desc: "Bring the blood in them to a rolling boil", tree: "Blood Magic", tier: 3, type: "active", maxRank: 5, req: "bloodspear", mana: 18, cooldownMs: 5500, baseMult: 1.0, rankMult: 0.16, synergies: [{ from: "bloodspear", pct: 8 }, { from: "decrepify", pct: 5 }] },
     { id: "hemorrhage", name: "Hemorrhage", desc: "Some wounds simply refuse to close", tree: "Blood Magic", tier: 3, type: "passive", maxRank: 10, passive: { dmgPct: 5, lifeSteal: 1 } },

@@ -773,3 +773,15 @@ Every class now has a third skill tree — a distinct third build archetype — 
 - **Druid — Spirits.** A summoner/beastmaster path: **Spirit Wolf** (call one to your side) and **Call the Pack** (the whole pack at once), on the pet system with a per-druid cap.
 
 The synergy web threads through all of them — e.g. Noxious off Caltrops+Toxin, Blizzard off Ice Shard, Holy Wrath off Holy Fire+Smite, Blood Boil off Blood Spear+Wither, Call the Pack off Spirit Wolf. The client skill panel lays out by tree column × tier row, so every third column appeared with no layout work. **Verification:** typecheck ×2 + client build + full `npm run smoke` green, with a new data assertion that every class fields exactly three trees; the 111-node battery validates every synergy source, requirement, and gate.
+
+## Balance pass — the third-tree skills, and a skill-DPS model to keep it honest
+
+The third-tree numbers were first-pass; this tunes the outliers against their peers and adds the tool that found them. New `scratchpad/skill-balance.ts` computes a **role-aware, single-target-equivalent sustained DPS** for every active at rank 5 (no gear, no synergies — a level field), folding in DoT ticks (Rend's bleed) and hazard tick-totals (Caltrops/Noxious/Blizzard), then flags any skill outside its role's band (strike / spam / line / aoe / hazard / summon / ult). It gates on *new* skills only, so pre-existing utility outliers (War Cry's stun, the summons) don't cause noise.
+
+Four outliers, now corrected:
+- **Ice Shard** was the highest-DPS skill in the game (1.94, above melee Bash) — a spammable *ranged* bolt. Trimmed to a strong-but-fair spammable (1.06): baseMult 0.8→0.5, cd 700→850.
+- **Blood Spear** — a spammable *piercing line* at 2.5× its peer Impaling Shot. Brought into the line band (1.22→0.67): baseMult 0.9→0.6, cd 1200→1500.
+- **Cleave** (t1 AoE) edged out the t2 Whirlwind; trimmed so tier order holds (0.83→0.69).
+- **Holy Wrath** — mild trim (0.80→0.74) and correctly modelled as a splash-AoE nuke rather than a pure single-target strike.
+
+Everything else (Rend's strike+bleed, the three hazards, Holy Fire, Blood Boil, the two summons) already sat in-band and was left alone. **Verification:** `skill-balance.ts` green (all 12 new actives in-band) + typecheck ×2 + full `npm run smoke`.
