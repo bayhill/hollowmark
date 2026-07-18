@@ -1883,8 +1883,15 @@ async function main() {
         if (n.type !== "passive" && (n.mana === undefined || n.cooldownMs === undefined)) {
           throw new Error(`${cls}/${n.id} is an active without mana/cooldown`);
         }
-        if (n.type === "passive" && !n.passive) throw new Error(`${cls}/${n.id} is a passive without stats`);
+        // a passive carries stats OR is a keystone (a transformative rule, no stat block); never both
+        if (n.type === "passive" && !n.passive && !n.keystone) throw new Error(`${cls}/${n.id} is a passive without stats`);
+        if (n.keystone && n.passive) throw new Error(`${cls}/${n.id} is a keystone with a stat block — pick one`);
       }
+      // exactly one keystone per class, single-rank, at the Transcendence tier
+      const keys = nodes.filter((n) => n.keystone);
+      if (keys.length !== 1) throw new Error(`${cls} should have exactly 1 keystone, has ${keys.length}`);
+      if (keys[0].maxRank !== 1) throw new Error(`${cls} keystone ${keys[0].id} must be single-rank`);
+      if (keys[0].tier !== 5) throw new Error(`${cls} keystone ${keys[0].id} must be a Transcendence (tier 5) node`);
       // gating: tier levels, prereqs, points, max rank
       const ult = ultimates[0];
       if (canAllocSkill(ult, {}, TIER_LEVELS[4] - 1, 5)) throw new Error(`${cls} ultimate allocatable below level ${TIER_LEVELS[4]}`);

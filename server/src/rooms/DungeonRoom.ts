@@ -110,6 +110,13 @@ import {
   HEX_RANGE,
   HEX_DURATION_MS,
   HEX_DMG_MULT,
+  KEYSTONE_CRIT_MULT,
+  KEYSTONE_PENETRATION,
+  KEYSTONE_BULWARK_HP,
+  KEYSTONE_BULWARK_DR,
+  KEYSTONE_SIPHON_FRAC,
+  KEYSTONE_PRIMAL_DMG,
+  KEYSTONE_PRIMAL_ATKSPD,
   MANA_POTION_DROP_CHANCE,
   MANA_POTION_RESTORE_FRACTION,
   BOSS_MANA_POTION_DROPS,
@@ -2749,7 +2756,14 @@ export class DungeonRoom extends Room<DungeonState> {
 
   private attackCooldown(p: Player): number {
     const atk = CLASS_ATTACKS[p.cls as keyof typeof CLASS_ATTACKS];
-    return Math.max(150, atk.cooldownMs * (1 - (p.derived.atkSpd ?? 0) / 100) * this.cdrMult(p));
+    // Druid keystone "Primal Fury": the wolf's hands blur faster still
+    const primal = Date.now() < p.wolfUntil && this.hasKeystone(p, "ks_primal") ? KEYSTONE_PRIMAL_ATKSPD : 0;
+    return Math.max(150, atk.cooldownMs * (1 - ((p.derived.atkSpd ?? 0) + primal) / 100) * this.cdrMult(p));
+  }
+
+  // a class keystone is a single-rank capstone; allocated ⇔ one hard point in its node
+  private hasKeystone(p: Player, id: string): boolean {
+    return (p.skills[id] ?? 0) > 0;
   }
 
   private outgoingDamage(p: Player, base: [number, number], mult = 1): number {
@@ -2772,14 +2786,17 @@ export class DungeonRoom extends Room<DungeonState> {
     }
     const shout = now < p.shoutUntil ? SHOUT_DMG_MULT : 1;
     const blessed = now < p.buffDmgUntil ? SHRINE_DMG_MULT : 1;
-    const wolf = now < p.wolfUntil ? WOLF_DMG_MULT : 1;
+    // Druid keystone "Primal Fury": the wolf hits harder still
+    const primal = now < p.wolfUntil && this.hasKeystone(p, "ks_primal") ? KEYSTONE_PRIMAL_DMG : 1;
+    const wolf = (now < p.wolfUntil ? WOLF_DMG_MULT : 1) * primal;
     // Death Wish: the dying hit hardest
     const berserk = p.effects.has("berserk_low") && p.hp < p.maxHp * BERSERK_THRESHOLD ? BERSERK_MULT : 1;
     // Hexer's curse declaws you — every blow lands feeble until it lifts
     const hexed = now < p.hexUntil ? HEX_DMG_MULT : 1;
     let total = flat * (1 + (d.dmgPct ?? 0) / 100) * mult * shout * blessed * wolf * berserk * hexed;
     p.lastCrit = Math.random() < (d.crit ?? 0) / 100;
-    if (p.lastCrit) total *= 2;
+    // Rogue keystone "Lethality": crits bite deeper
+    if (p.lastCrit) total *= this.hasKeystone(p, "ks_lethality") ? KEYSTONE_CRIT_MULT : 2;
     return Math.max(1, Math.round(total));
   }
 
@@ -3658,7 +3675,9 @@ export class DungeonRoom extends Room<DungeonState> {
       if (attacker.lastElem && attacker.lastElemFrac > 0) {
         const raw = monsterResistOf(m.kind, attacker.lastElem);
         if (raw !== 0) {
-          const net = Math.max(-100, Math.min(100, raw - (attacker.derived.penetration ?? 0)));
+          // Sorcerer keystone "Unraveling" claws back an extra slice of the ward
+          const pen = (attacker.derived.penetration ?? 0) + (this.hasKeystone(attacker, "ks_unraveling") ? KEYSTONE_PENETRATION : 0);
+          const net = Math.max(-100, Math.min(100, raw - pen));
           if (net !== 0) {
             const before = amount;
             amount = Math.max(1, Math.round(amount * (1 - attacker.lastElemFrac * (net / 100))));
@@ -3671,6 +3690,11 @@ export class DungeonRoom extends Room<DungeonState> {
     if (now < m.vulnUntil) amount = Math.round(amount * DECREPIFY_VULN);
 
     m.hp -= amount;
+    // Necromancer keystone "Soul Siphon": the killing blow feeds you
+    if (m.hp <= 0 && attacker && attacker.hp > 0 && this.hasKeystone(attacker, "ks_siphon")) {
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + Math.round(attacker.maxHp * KEYSTONE_SIPHON_FRAC));
+      attacker.mana = Math.min(attacker.maxMana, attacker.mana + Math.round(attacker.maxMana * KEYSTONE_SIPHON_FRAC));
+    }
     this.broadcast("hit", { t: "m", id, amount, x: m.x, y: m.y, crit: attacker?.lastCrit ?? false, by: attackerId, kill: m.hp <= 0, resisted });
 
     // Spiked packs throw part of the blow back — big hits punish you, chip damage is safe.
@@ -4352,7 +4376,7 @@ export class DungeonRoom extends Room<DungeonState> {
           case "mf": p.buffMfUntil = Math.max(p.buffMfUntil, now2 + ms); break;
           case "heal": p.hp = p.maxHp; break;
           case "vuln": p.curseVulnUntil = Math.max(p.curseVulnUntil, now2 + ms); break;
-          case "slow": p.chilledUntil = Math.max(p.chilledUntil, now2 + ms); break;
+          case "slow": if (!this.hasKeystone(p, "ks_immovable")) p.chilledUntil = Math.max(p.chilledUntil, now2 + ms); break;
         }
       }
       // the toucher reads the scene; everyone hears there was a story here
@@ -4423,7 +4447,7 @@ export class DungeonRoom extends Room<DungeonState> {
       const elemPart = amount * MONSTER_ELEMENT_FRACTION * (1 - res / 100);
       const physPart = Math.max(0, amount * (1 - MONSTER_ELEMENT_FRACTION) - (p.derived.armor ?? 0));
       reduced = Math.max(1, Math.round(physPart + elemPart));
-      if (element === "cold") {
+      if (element === "cold" && !this.hasKeystone(p, "ks_immovable")) {
         p.chilledUntil = Date.now() + PLAYER_CHILL_MS * (1 - res / 100);
       }
     } else {
@@ -4437,6 +4461,10 @@ export class DungeonRoom extends Room<DungeonState> {
     }
     // a river's marking, or worse — the cursed take extra harm for a while
     if (Date.now() < p.curseVulnUntil) reduced = Math.max(1, Math.round(reduced * 1.25));
+    // Paladin keystone "Bulwark": the well-built wall sheds blows while it stands tall
+    if (p.hp > p.maxHp * KEYSTONE_BULWARK_HP && this.hasKeystone(p, "ks_bulwark")) {
+      reduced = Math.max(1, Math.round(reduced * (1 - KEYSTONE_BULWARK_DR)));
+    }
     p.hp = Math.max(0, p.hp - reduced);
     p.lastDamaged = Date.now();
     // Adrenaline: pain makes you fast

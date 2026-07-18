@@ -1943,6 +1943,17 @@ export const SKILL_POINTS_PER_LEVEL = 1;
 export const TIER_LEVELS = [0, 1, 4, 8, 12, 30]; // tier 5: Transcendence — the level-99 endgame
 export const ULTIMATE_TIER = 4;
 
+// --- class keystones: one transformative capstone per class at the Transcendence tier ---
+// Single rank, level 30, no loot required — the build-defining CHOICE (spend it here, or on flat
+// Transcendence stats?). Each is a conditional RULE branched in server combat, keyed by node id.
+export const KEYSTONE_CRIT_MULT = 2.5; // Rogue "Lethality": crits deal ×2.5 instead of ×2
+export const KEYSTONE_PENETRATION = 25; // Sorcerer "Unraveling": ignore +25% of monster elem resist
+export const KEYSTONE_BULWARK_HP = 0.6; // Paladin "Bulwark": while above 60% life…
+export const KEYSTONE_BULWARK_DR = 0.2; // …take 20% less damage
+export const KEYSTONE_SIPHON_FRAC = 0.03; // Necromancer "Soul Siphon": each kill restores 3% hp+mana
+export const KEYSTONE_PRIMAL_DMG = 1.3; // Druid "Primal Fury": +30% damage in Werewolf form…
+export const KEYSTONE_PRIMAL_ATKSPD = 30; // …and +30% attack speed
+
 export type SkillType = "active" | "passive" | "ultimate";
 
 export interface SkillNode {
@@ -1962,6 +1973,10 @@ export interface SkillNode {
   synergy?: { from: string; pct: number }; // +pct% damage per hard point in `from`
   // passives grant stats per rank
   passive?: ItemStats;
+  // a class KEYSTONE: a single-rank Transcendence capstone whose effect is a transformative RULE
+  // (handled in server combat), not a stat block. The string is the one-line rule for the tooltip;
+  // its presence is what brands the node a keystone.
+  keystone?: string;
 }
 
 export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
@@ -1980,6 +1995,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_edge", name: "Warlord's Edge", desc: "Ten thousand swings, distilled", tree: "Might", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 5, crit: 1 } },
     { id: "t5_skin", name: "Skin of Kragmar", desc: "Weather, wars, and worse have tried", tree: "War Cries", tier: 5, type: "passive", maxRank: 12, passive: { armor: 4, allRes: 1 } },
     { id: "t5_voice", name: "Voice of War", desc: "Your shout arrives before your axe", tree: "War Cries", tier: 5, type: "passive", maxRank: 12, passive: { atkSpd: 2, dmg: 1 } },
+    { id: "ks_immovable", name: "Immovable", desc: "The mountain does not flinch, and cannot be moved", tree: "Might", tier: 5, type: "passive", maxRank: 1, keystone: "Cannot be chilled or slowed" },
   ],
   rogue: [
     { id: "multishot", name: "Multishot", desc: "One draw, a fan of death", tree: "Archery", tier: 1, type: "active", maxRank: 5, mana: 10, cooldownMs: 2000, baseMult: 0.9, rankMult: 0.1 },
@@ -1995,6 +2011,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_quiver", name: "Quiver of Hours", desc: "You have never once run out", tree: "Archery", tier: 5, type: "passive", maxRank: 12, passive: { atkSpd: 2, dmgPct: 3 } },
     { id: "t5_nowhere", name: "Nowhere Twice", desc: "They aim where you were", tree: "Shadow", tier: 5, type: "passive", maxRank: 12, passive: { dodge: 2, moveSpd: 1 } },
     { id: "t5_cuts", name: "A Thousand Cuts", desc: "None of them individually matters. That's the trick.", tree: "Shadow", tier: 5, type: "passive", maxRank: 12, passive: { dmg: 2, dmgPct: 2 } },
+    { id: "ks_lethality", name: "Lethality", desc: "When you find the gap, drive everything through it", tree: "Shadow", tier: 5, type: "passive", maxRank: 1, keystone: "Critical hits deal ×2.5 instead of ×2" },
   ],
   sorcerer: [
     { id: "chain", name: "Chain Lightning", desc: "Lightning that hungers for company", tree: "Elements", tier: 1, type: "active", maxRank: 5, mana: 14, cooldownMs: 2500, baseMult: 1.0, rankMult: 0.15, synergy: { from: "frostnova", pct: 6 } },
@@ -2009,6 +2026,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_frost", name: "Killing Frost", desc: "Cold enough to find the gaps in anything", tree: "Elements", tier: 5, type: "passive", maxRank: 12, passive: { crit: 2 } },
     { id: "t5_well", name: "Bottomless Well", desc: "The well was never the limit. You were.", tree: "Arcane", tier: 5, type: "passive", maxRank: 12, passive: { maxMana: 10, manaRegen: 0.5 } },
     { id: "t5_dilation", name: "Time Dilation", desc: "Everyone else is simply slow", tree: "Arcane", tier: 5, type: "passive", maxRank: 12, passive: { cdr: 1, atkSpd: 1 } },
+    { id: "ks_unraveling", name: "Unraveling", desc: "Every ward is just a knot you haven't undone yet", tree: "Elements", tier: 5, type: "passive", maxRank: 1, keystone: "Your attacks ignore an extra 25% of monster resistance" },
   ],
   paladin: [
     { id: "smite", name: "Smite", desc: "A shield-blow that leaves them reeling", tree: "Combat", tier: 1, type: "active", maxRank: 5, mana: 6, cooldownMs: 1400, baseMult: 1.4, rankMult: 0.2 },
@@ -2023,6 +2041,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_anvil", name: "The Anvil", desc: "Let them break themselves upon you", tree: "Combat", tier: 5, type: "passive", maxRank: 12, passive: { armor: 4, maxHp: 8 } },
     { id: "t5_aegisfaith", name: "Aegis of Faith", desc: "Fire, frost, and lightning read the same scripture", tree: "Auras", tier: 5, type: "passive", maxRank: 12, passive: { allRes: 2 } },
     { id: "t5_everlasting", name: "Light Everlasting", desc: "The lamp that outlasts the night", tree: "Auras", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 10, manaRegen: 0.3 } },
+    { id: "ks_bulwark", name: "Bulwark", desc: "Faith is a wall, and you are well-built", tree: "Combat", tier: 5, type: "passive", maxRank: 1, keystone: "While above 60% life, take 20% less damage" },
   ],
   necromancer: [
     { id: "teeth", name: "Teeth", desc: "A fan of splintered bone", tree: "Poison & Bone", tier: 1, type: "active", maxRank: 5, mana: 9, cooldownMs: 2000, baseMult: 0.6, rankMult: 0.08 },
@@ -2037,6 +2056,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_plague", name: "Plague Eternal", desc: "It never burned out. It just got patient.", tree: "Poison & Bone", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 5 } },
     { id: "t5_pact", name: "Deathlord's Pact", desc: "Death signed. You witnessed.", tree: "Summoning", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 8, manaRegen: 0.4 } },
     { id: "t5_legion", name: "The Grave Legion", desc: "The dead do not desert", tree: "Summoning", tier: 5, type: "passive", maxRank: 12, passive: { dmgPct: 3, maxMana: 8 } },
+    { id: "ks_siphon", name: "Soul Siphon", desc: "Every death feeds the one who dealt it", tree: "Poison & Bone", tier: 5, type: "passive", maxRank: 1, keystone: "Each kill restores 3% of your life and mana" },
   ],
   druid: [
     { id: "firestorm", name: "Firestorm", desc: "Ribbons of flame race along the ground", tree: "Elemental", tier: 1, type: "active", maxRank: 5, mana: 8, cooldownMs: 2500, baseMult: 0.45, rankMult: 0.08 },
@@ -2051,6 +2071,7 @@ export const SKILL_TREES: Record<ClassName, SkillNode[]> = {
     { id: "t5_wildfire", name: "Wildfire", desc: "It spreads because you let it", tree: "Elemental", tier: 5, type: "passive", maxRank: 12, passive: { crit: 2 } },
     { id: "t5_weald", name: "Heart of the Weald", desc: "Older than the town, older than the war", tree: "Wild", tier: 5, type: "passive", maxRank: 12, passive: { maxHp: 12 } },
     { id: "t5_oldshape", name: "The Old Shape", desc: "The wolf remembers what you keep forgetting", tree: "Wild", tier: 5, type: "passive", maxRank: 12, passive: { atkSpd: 2, armor: 2 } },
+    { id: "ks_primal", name: "Primal Fury", desc: "The shape was never a costume — it is what you are", tree: "Wild", tier: 5, type: "passive", maxRank: 1, keystone: "In Werewolf form, +30% damage and attack speed" },
   ],
 };
 

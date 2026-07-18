@@ -1070,6 +1070,20 @@ export class SkillPanel {
         y += 15;
       }
     }
+    if (node.keystone) {
+      // a class keystone: brand it, then state the transformative rule (no per-rank stats)
+      texts.push(
+        this.scene.add.text(10, y, "◆ KEYSTONE", {
+          fontFamily: "monospace", fontSize: "12px", fontStyle: "bold", color: "#c58ae8",
+        })
+      );
+      y += 16;
+      const rule = this.scene.add.text(10, y, node.keystone, {
+        fontFamily: "monospace", fontSize: "13px", color: "#e8cf7a", wordWrap: { width: 300 },
+      });
+      texts.push(rule);
+      y += rule.height + 5;
+    }
     if (node.baseMult !== undefined && this.cls) {
       // actives show their +skills-boosted damage; passives (above) stay on hard ranks
       const eff = effectiveSkills(this.skills, this.plusSkills);
