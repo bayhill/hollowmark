@@ -250,6 +250,8 @@ import {
   rollSetpiece,
   setpieceById,
   SETPIECE_CHANCE,
+  storyBeatFor,
+  ENDING_FRAGMENT,
   NOVA_DMG,
   NOVA_INTERVAL_MS,
   NOVA_RADIUS,
@@ -1707,6 +1709,13 @@ export class DungeonRoom extends Room<DungeonState> {
       client?.send("questdone", { id: q.id, name: q.name, gold: q.rewardGold, xp: q.rewardXp });
       if (this.state.players.size > 1) {
         this.broadcast("announce", { text: `${p.name || p.cls} completed "${q.name}"` });
+      }
+      // the authored spine: a milestone quest plays a paged beat the first time it completes
+      const beat = storyBeatFor(id);
+      if (beat) {
+        client?.send("storybeat", { quest: id });
+        // the finale also seals the Codex capstone
+        if (beat.ending) this.grantFragment(p, sid, ENDING_FRAGMENT);
       }
     }
     this.sendQuests(sid, p);

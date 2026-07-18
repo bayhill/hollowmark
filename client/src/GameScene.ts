@@ -731,6 +731,8 @@ export class GameScene extends Phaser.Scene {
 
       // a set-piece: open its inscription for the reader (the fragment grant is codexlog'd separately)
       room.onMessage("setpiece", (msg: any) => this.ui?.openSetpieceDialogue(msg.id));
+      // a story beat: an authored milestone (act-boss / Hollow King), or the finale cinematic
+      room.onMessage("storybeat", (msg: any) => this.ui?.openStoryBeat(msg.quest));
       // the Codex: account-wide bestiary/chronicle/relics, pushed on join, on change, and on open
       room.onMessage("codex", (msg: any) => this.ui?.setCodex(msg));
       room.onMessage("codexlog", (msg: any) => {

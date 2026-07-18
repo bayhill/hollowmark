@@ -3729,6 +3729,8 @@ export const CODEX_CHAPTERS: CodexChapter[] = [
   // Stage 2 — chapters filled by environmental set-pieces found in the floors, not by bosses
   { id: "ch_ternion", name: "The Ternion Order", blurb: "The vanished alchemist-scholars who worked transmutation in threes — pieced together from what they left in the dark.", reward: { stats: { magicFind: 5 }, desc: "+5% magic find" } },
   { id: "ch_folk", name: "The Fallen Folk", blurb: "Not kings, not monsters — the ordinary dead of each land, and the small things they left behind.", reward: { stats: { maxHp: 10 }, desc: "+10 life" } },
+  // the capstone — sealed until the Unmaker is unmade
+  { id: "ch_ending", name: "The Unmaking Undone", blurb: "What was written when the last of the Hollow Kings fell at the bottom of his own hall.", reward: { stats: { dmgPct: 3, allRes: 2 }, desc: "+3% damage, +2 all resistance" } },
 ];
 
 export const LORE_FRAGMENTS: LoreFragment[] = [
@@ -3757,6 +3759,8 @@ export const LORE_FRAGMENTS: LoreFragment[] = [
   { id: "frag_folk_2", chapter: "ch_folk", title: "The Wrapped Family", text: "Three shapes seated together under the sand, wrapped with a care that outlived whoever did the wrapping — tallest to smallest, hands still joined down the row. The Queen preserves everything. She does not ask whether it wished to be kept." },
   { id: "frag_folk_3", chapter: "ch_folk", title: "The Ferryman's Ledger", text: "A toll-ledger nailed to a drowned post, every passage marked paid, every passenger marked delivered. The last line reads: 'All aboard. None ashore. The far bank has moved again.' The ink under the water has not run in a hundred years." },
   { id: "frag_folk_4", chapter: "ch_folk", title: "The Unsent Letter", text: "Tucked in a dead sentry's breastplate, a letter home: '—holding the wall, tell mother the ash is only ash, tell her we—' It stops there. The wall did not hold. The ash was never only ash. The letter never left the Vigil." },
+  // ch_ending — recovered the moment Uldrath falls (granted by the ending flow, not found)
+  { id: "frag_ending", chapter: "ch_ending", title: "What Remains", text: "\"I am what remains when all else is finished,\" the Unmaker said, and was wrong, because you remained. The Hollow Throne is empty. The three names traded to the dark are unspoken now, and stay unspoken. The world does not thank you — it has forgotten how — but it goes on, which is the only thanks a dying road has left to give. And far below the empty throne, in the dark under the dark, something that is not a brother begins, very slowly, to wake." },
 ];
 
 const FRAGMENT_BY_ID = new Map(LORE_FRAGMENTS.map((f) => [f.id, f]));
@@ -3868,6 +3872,54 @@ export function rollSetpiece(act: number, rng: () => number): SetPiece | null {
   return pool[Math.floor(rng() * pool.length)];
 }
 export const SETPIECE_CHANCE = 0.4; // a monument stands on many, not all, floors
+
+// ---- Story beats: the authored spine, fired once when a milestone quest first completes ----
+//
+// Keyed by quest id. Felling an act boss (or a Hollow King) plays a paged beat the FIRST
+// time that hero does it — questsDone already guarantees once-only + persistence, so farm
+// kills stay quiet. The_unmaking is the ending: it carries `ending: true`, which the client
+// renders as a full-screen cinematic (and the server also seals the Codex capstone chapter).
+export interface StoryBeat {
+  quest: string; // the quest id whose completion fires this beat
+  title: string;
+  pages: string[];
+  ending?: boolean; // the finale — Uldrath unmade
+}
+
+export const STORY_BEATS: StoryBeat[] = [
+  { quest: "thorned_maiden", title: "The road east opens", pages: [
+    "Vessira's thorns go slack. The wound she planted in the Mournfield — in all of it — stops spreading, for the first time since the grieving began.",
+    "Beyond the wood the caravan-road runs east, into the Sunscar Wastes, where Zerath Oasis waits and something older than thirst has learned to wear the sand.",
+  ]},
+  { quest: "embalmed_queen", title: "The wastes let go", pages: [
+    "Queen Nyzat, who wore the desert a thousand years, is unwrapped at last. The gardens she meant to keep can finish dying now — the kindest thing left to offer them.",
+    "The road runs on, into the Drowned Green, where a flood came and did not leave, and a god sits patient at the bottom of it.",
+  ]},
+  { quest: "drowned_god", title: "The river recedes", pages: [
+    "Ssarim, the Drowned God, sinks a final time, and the flood that stayed a hundred years remembers, all at once, how to leave. The far bank stops moving.",
+    "Only the Hollow Throne remains now — under ashfall, at the end of the road — and the three brother-kings who traded their names for it.",
+  ]},
+  { quest: "oathbreaker", title: "The Forsworn falls", pages: [
+    "Aldric the Forsworn goes down still remembering the light he turned from. \"I chose this,\" he says one last time — not a boast now, only the truth, and the worst of it.",
+    "Two brothers remain between you and the empty throne.",
+  ]},
+  { quest: "dread_itself", title: "Dread goes out", pages: [
+    "Malgrim, the King of Dread — first of the three to trade his name — has nothing left to trade. The fear he gave away so freely finds no more takers, and goes out like a blown lamp.",
+    "One brother remains. The oldest. The last. The Unmaker, at the bottom of everything.",
+  ]},
+  { quest: "the_unmaking", title: "THE UNMAKING UNDONE", ending: true, pages: [
+    "Uldrath, the Unmaker, last of the Hollow Kings, kneels in the hall he emptied of everything but himself.",
+    "\"I am what remains when all else is finished,\" he says — and is wrong, because you are still standing, and standing is a kind of remaining he never accounted for.",
+    "The Hollow Throne goes cold, and stays cold. The three traded names are unspoken, and will not be spoken again. The dying road, for the first time in a long age, is only a road.",
+    "It is over. The world does not know how to thank you, so it simply goes on. But far below the empty throne, in the dark beneath the dark, the Endless Abyss draws its first breath — and it has been waiting for someone exactly like you.",
+  ]},
+];
+
+const STORY_BEAT_BY_QUEST = new Map(STORY_BEATS.map((b) => [b.quest, b]));
+export function storyBeatFor(questId: string): StoryBeat | undefined {
+  return STORY_BEAT_BY_QUEST.get(questId);
+}
+export const ENDING_FRAGMENT = "frag_ending"; // sealed into the Codex when the finale plays
 
 // --- identify: the suspense between the beam and the name ---
 

@@ -16,6 +16,7 @@ import {
   shrineNpcId,
   encounterById,
   setpieceById,
+  storyBeatFor,
   isBossKind,
   BESTIARY,
   CODEX_CHAPTERS,
@@ -71,6 +72,7 @@ export class UIScene extends Phaser.Scene {
   private codexTab = 0; // 0 Bestiary · 1 Chronicle · 2 Relics
   codexVisible = false;
   private codex: { bestiary: Record<string, number>; fragments: string[]; relics: string[] } = { bestiary: {}, fragments: [], relics: [] };
+  private endingVeil?: Phaser.GameObjects.Rectangle; // full-screen veil behind the finale cinematic
 
   private trackedQuestId: string | null = localStorage.getItem("arpg_tracked_quest");
   private trackerRoot?: Phaser.GameObjects.Container;
@@ -1069,6 +1071,33 @@ export class UIScene extends Phaser.Scene {
     this.codexBounds.setTo(x, y, W, H);
   }
 
+  // an authored story beat — paged prose in the dialogue window. The finale (ending: true)
+  // waits for the victory banner to land, then plays behind a full-screen veil.
+  openStoryBeat(questId: string) {
+    const beat = storyBeatFor(questId);
+    if (!beat) return;
+    const play = () => {
+      if (beat.ending) {
+        this.endingVeil?.destroy();
+        this.endingVeil = this.add
+          .rectangle(0, 0, this.scale.width, this.scale.height, 0x07060a, 0)
+          .setOrigin(0, 0).setScrollFactor(0).setDepth(999_000).setInteractive();
+        this.tweens.add({ targets: this.endingVeil, alpha: 0.92, duration: 1000 });
+      }
+      this.dlgNpc = { id: `beat_${questId}`, name: beat.title };
+      this.dlgTopics = [];
+      this.dlgPages = beat.pages;
+      this.dlgPageIdx = 0;
+      this.dlgReturn = "close";
+      this.dlgMode = "text";
+      this.dialogueVisible = true;
+      this.rebuildDialogue();
+      this.page();
+    };
+    if (beat.ending) this.time.delayedCall(1600, play); // let the victory banner + gold shower land first
+    else play();
+  }
+
   // a set-piece reads like an encounter vignette — paged inscription, no menu
   openSetpieceDialogue(spId: string) {
     const sp = setpieceById(spId);
@@ -1105,6 +1134,12 @@ export class UIScene extends Phaser.Scene {
     this.dlgNpc = null;
     this.dlgTopics = [];
     this.dlgPages = [];
+    // the finale's veil lifts with its last page — fade it out rather than snap
+    if (this.endingVeil) {
+      const veil = this.endingVeil;
+      this.endingVeil = undefined;
+      this.tweens.add({ targets: veil, alpha: 0, duration: 1200, onComplete: () => veil.destroy() });
+    }
   }
 
   private selectTopic(topic: DialogueTopic) {
