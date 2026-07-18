@@ -55,10 +55,17 @@ const DIR = process.env.ARPG_DATA_DIR || path.resolve(process.cwd(), "data", "pr
 const ACCOUNT_DIR = process.env.ARPG_ACCOUNT_DIR || path.resolve(path.dirname(DIR), "accounts");
 const KEY_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
-// an ACCOUNT spans all of a player's heroes — its shared stash is the cross-character meta.
-// Kept in its OWN file (never inside a hero profile) so items are never double-stored.
+// an ACCOUNT spans all of a player's heroes — its shared stash and Codex are the
+// cross-character meta. Kept in its OWN file (never inside a hero profile) so items
+// are never double-stored and the Codex is shared by every hero the account owns.
+export interface AccountCodex {
+  bestiary?: Record<string, number>; // kind → total kills
+  fragments?: string[]; // recovered lore-fragment ids
+  relics?: string[]; // discovered relic (item) names
+}
 export interface Account {
   sharedStash?: Item[];
+  codex?: AccountCodex;
 }
 export function loadAccount(key: string): Account {
   if (!KEY_RE.test(key)) return {};
@@ -68,13 +75,16 @@ export function loadAccount(key: string): Account {
     return {};
   }
 }
-export function saveAccount(key: string, acc: Account) {
+// Partial-merge save: only the fields present in `patch` are overwritten, so a
+// stash-only save never clobbers the Codex (and vice-versa). Read-modify-write.
+export function saveAccount(key: string, patch: Account) {
   if (!KEY_RE.test(key)) return;
   try {
     fs.mkdirSync(ACCOUNT_DIR, { recursive: true });
+    const merged = { ...loadAccount(key), ...patch };
     const file = path.join(ACCOUNT_DIR, `${key}.json`);
     const tmp = `${file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(acc));
+    fs.writeFileSync(tmp, JSON.stringify(merged));
     fs.renameSync(tmp, file);
   } catch (err) {
     console.error(`[persistence] failed to save account ${key}:`, err);

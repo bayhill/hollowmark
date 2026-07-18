@@ -1,6 +1,6 @@
 import { Room, Client } from "colyseus";
 import { Schema, MapSchema, type } from "@colyseus/schema";
-import { Profile, ensureDataDir, loadProfile, saveProfile, validKey, loadAccount, saveAccount } from "../persistence";
+import { Profile, ensureDataDir, loadProfile, saveProfile, validKey, loadAccount, saveAccount, AccountCodex } from "../persistence";
 import {
   Attack,
   BOSS_EXTRA_DROP_CHANCE,
@@ -239,6 +239,17 @@ import {
   BOSS_LINES,
   BOSS_NAMES,
   BossKind,
+  BESTIARY,
+  bestiaryEntry,
+  codexChapterBonuses,
+  fragmentsForBoss,
+  fragmentById,
+  chapterComplete,
+  CODEX_CHAPTERS,
+  relicLore,
+  rollSetpiece,
+  setpieceById,
+  SETPIECE_CHANCE,
   NOVA_DMG,
   NOVA_INTERVAL_MS,
   NOVA_RADIUS,
@@ -504,6 +515,7 @@ export class Player extends Schema {
   inventory: Item[] = [];
   stashItems: Item[] = [];
   sharedStash: Item[] = []; // the ACCOUNT-wide stash — shared across all this player's heroes
+  codex: AccountCodex = { bestiary: {}, fragments: [], relics: [] }; // account-wide Codex progress
   derived: ItemStats = {};
   persistKey = ""; // profile identity, from client join options
   accountKey = ""; // account identity — spans heroes, keys the shared stash
@@ -949,6 +961,23 @@ export class DungeonRoom extends Room<DungeonState> {
         if (!p || !m || !msg?.id) return;
         this.damageMonster(msg.id, m, this.outgoingDamage(p, [0, 0], 1), client.sessionId);
       });
+      // Dev-only: drop a named set-piece shrine beside the caller so the probe can touch it
+      // deterministically (placement is an ~SETPIECE_CHANCE-per-floor roll otherwise). Returns its id.
+      this.onMessage("smokesetpiece", (client: Client, msg: { id?: string }) => {
+        const p = this.state.players.get(client.sessionId);
+        const sp = msg?.id ? setpieceById(msg.id) : undefined;
+        if (!p || !sp) return;
+        const pos = this.scatter(p.x, p.y, 30);
+        const s = new Shrine();
+        s.x = pos.x;
+        s.y = pos.y;
+        s.kind = "setpiece";
+        s.variant = sp.id;
+        s.label = sp.label;
+        const id = `sp_${this.nextId++}`;
+        this.state.shrines.set(id, s);
+        client.send("smokechamp", { id }); // reuse the id-return channel the probes already listen on
+      });
     }
     this.onMessage("socketrune", (client: Client, msg: { runeId: string; itemId: string }) =>
       this.handleSocketRune(client, msg)
@@ -956,6 +985,10 @@ export class DungeonRoom extends Room<DungeonState> {
     this.onMessage("identify", (client: Client, msg: { id: string }) => this.handleIdentify(client, msg));
     this.onMessage("opensmith", (client: Client) => this.sendSmith(client));
     this.onMessage("openaltar", (client: Client) => this.sendAltar(client));
+    this.onMessage("openreliquary", (client: Client) => {
+      const p = this.state.players.get(client.sessionId);
+      if (p) this.sendCodex(client.sessionId, p, true);
+    });
     this.onMessage("altarrecipe", (client: Client, msg: { recipe?: string }) => this.handleAltarRecipe(client, msg));
     this.onMessage("reforge", (client: Client, msg: { id?: string }) => this.handleReforge(client, msg));
     this.onMessage("punchsockets", (client: Client, msg: { id: string }) => this.handlePunchSockets(client, msg));
@@ -1343,7 +1376,15 @@ export class DungeonRoom extends Room<DungeonState> {
     );
     player.persistKey = key;
     player.accountKey = accountKey;
-    if (accountKey) player.sharedStash = loadAccount(accountKey).sharedStash ?? [];
+    if (accountKey) {
+      const acc = loadAccount(accountKey);
+      player.sharedStash = acc.sharedStash ?? [];
+      player.codex = {
+        bestiary: acc.codex?.bestiary ?? {},
+        fragments: acc.codex?.fragments ?? [],
+        relics: acc.codex?.relics ?? [],
+      };
+    }
     player.name = sanitizeName(profile?.name ?? options?.name);
 
     const base = CLASS_BASE_ATTRS[cls as ClassName];
@@ -1423,6 +1464,8 @@ export class DungeonRoom extends Room<DungeonState> {
     this.sendLoadout(client, player);
     // the log arrives with the hero; floor-gated quests complete on the next DESCENT
     this.sendQuests(client.sessionId, player);
+    // the Codex arrives too — the account's whole remembered world, silently (no panel)
+    this.sendCodex(client.sessionId, player);
     // …and if a Rogue is on the payroll, she reports for duty
     if (player.merc && !player.merc.dead) this.spawnMercFor(client.sessionId, player);
     this.sendMercLoadout(client, player);
@@ -1674,6 +1717,86 @@ export class DungeonRoom extends Room<DungeonState> {
     this.state.players.forEach((p, sid) => this.questAdvance(p, sid, id, amount));
   }
 
+  // --- The Codex: the world remembers, and the memory is account-wide + shared ---
+
+  private saveCodex(p: Player) {
+    if (p.accountKey) saveAccount(p.accountKey, { codex: p.codex });
+  }
+
+  private sendCodex(sid: string, p: Player, open = false) {
+    this.clientOf(sid)?.send("codex", {
+      bestiary: p.codex.bestiary ?? {},
+      fragments: p.codex.fragments ?? [],
+      relics: p.codex.relics ?? [],
+      open,
+    });
+  }
+
+  // record one fragment onto a player's book (no persist/broadcast — caller batches).
+  // Returns true if it was newly recovered. Announces the fragment and any chapter it finishes.
+  private addFragment(p: Player, sid: string, fragId: string): boolean {
+    const frags = (p.codex.fragments ??= []);
+    if (frags.includes(fragId)) return false;
+    const f = fragmentById(fragId);
+    if (!f) return false; // unknown fragment id — ignore
+    frags.push(fragId);
+    this.clientOf(sid)?.send("codexlog", { text: `Fragment recovered: ${f.title}` });
+    const ch = CODEX_CHAPTERS.find((c) => c.id === f.chapter);
+    if (ch && chapterComplete(ch.id, frags)) {
+      this.clientOf(sid)?.send("codexlog", { text: `Chapter complete: ${ch.name} — ${ch.reward.desc}` });
+      this.recompute(p); // the chapter boon takes effect now
+    }
+    return true;
+  }
+
+  // grant a fragment and persist/broadcast immediately (set-pieces, single-source grants)
+  private grantFragment(p: Player, sid: string, fragId: string): boolean {
+    if (!p.accountKey) return false;
+    const isNew = this.addFragment(p, sid, fragId);
+    if (isNew) {
+      this.saveCodex(p);
+      this.sendCodex(sid, p);
+    }
+    return isNew;
+  }
+
+  // a kill is witnessed by everyone present — each account records it, and a boss
+  // leaves a lore fragment behind. Insight/chapter milestones announce themselves.
+  private recordKill(m: Monster) {
+    const boss = isBossKind(m.kind);
+    const entry = bestiaryEntry(m.kind);
+    if (!entry) return; // unknown kind (e.g. a summoned pet) — nothing to record
+    const bossFrags = boss ? fragmentsForBoss(m.kind) : [];
+    this.state.players.forEach((p, sid) => {
+      if (!p.accountKey) return; // no account → no book to write in
+      const b = (p.codex.bestiary ??= {});
+      const before = b[m.kind] ?? 0;
+      b[m.kind] = before + 1;
+      // first sighting, and the insight milestone, are worth a line
+      if (before === 0) {
+        this.clientOf(sid)?.send("codexlog", { text: `Bestiary: ${entry.name} recorded` });
+      } else if (before < entry.insightAt && b[m.kind] >= entry.insightAt) {
+        this.clientOf(sid)?.send("codexlog", { text: `Insight gained: ${entry.name}` });
+      }
+      // bosses leave fragments — a completed chapter is a permanent boon
+      for (const f of bossFrags) this.addFragment(p, sid, f.id);
+      this.saveCodex(p);
+      this.sendCodex(sid, p);
+    });
+  }
+
+  // finding (identifying, or picking up already-identified) a signature relic writes its story
+  private recordRelic(p: Player, sid: string, item: Item) {
+    if (!p.accountKey || !item?.name) return;
+    if (!relicLore(item.name)) return; // only curated relics have a page
+    const relics = (p.codex.relics ??= []);
+    if (relics.includes(item.name)) return;
+    relics.push(item.name);
+    this.saveCodex(p);
+    this.sendCodex(sid, p);
+    this.clientOf(sid)?.send("codexlog", { text: `Relic catalogued: ${item.name}` });
+  }
+
   // quests satisfied by simply standing on a floor
   private questFloorCheck(p: Player, sid: string) {
     const act = this.state.act;
@@ -1834,6 +1957,31 @@ export class DungeonRoom extends Room<DungeonState> {
       }
     }
 
+    // a monument stands on many floors — a scene to read, and a lore fragment to keep
+    if (!this.isCowLevel && this.layout.camps.length && Math.random() < SETPIECE_CHANCE) {
+      const sp = rollSetpiece(this.state.act, Math.random);
+      if (sp) {
+        const camp = this.layout.camps[Math.floor(Math.random() * this.layout.camps.length)];
+        let sx = camp.x;
+        let sy = camp.y;
+        for (let tries = 0; tries < 24; tries++) {
+          const q = this.scatter(camp.x, camp.y);
+          if (canStand(this.map, q.x, q.y) && !isInTown(q.y)) {
+            sx = q.x;
+            sy = q.y;
+            break;
+          }
+        }
+        const s = new Shrine();
+        s.x = sx;
+        s.y = sy;
+        s.kind = "setpiece";
+        s.variant = sp.id;
+        s.label = sp.label;
+        this.state.shrines.set(`sp_${this.nextId++}`, s);
+      }
+    }
+
     // the town is furnished the same way every floor
     const stash = new Shrine();
     stash.x = TOWN.stash.x;
@@ -1903,6 +2051,14 @@ export class DungeonRoom extends Room<DungeonState> {
     transmute.kind = "transmute";
     transmute.label = "Ternion Altar";
     this.state.shrines.set(`transmute_${this.nextId++}`, transmute);
+
+    // the Reliquary: the archive that holds this account's Codex — click to open the book
+    const reliquary = new Shrine();
+    reliquary.x = TOWN.reliquary.x;
+    reliquary.y = TOWN.reliquary.y;
+    reliquary.kind = "reliquary";
+    reliquary.label = "The Reliquary";
+    this.state.shrines.set(`reliquary_${this.nextId++}`, reliquary);
 
     const alchemist = new Shrine();
     alchemist.x = TOWN.alchemist.x;
@@ -2318,6 +2474,7 @@ export class DungeonRoom extends Room<DungeonState> {
     p.gold -= cost;
     delete item.unidentified;
     if (item.slot === "charm") this.recompute(p); // identified charms start working
+    this.recordRelic(p, client.sessionId, item); // the truth revealed — catalogue it if it's a relic
     this.sendLoadout(client, p);
     client.send("identified", { name: item.name, rarity: item.rarity, cost });
   }
@@ -2576,6 +2733,8 @@ export class DungeonRoom extends Room<DungeonState> {
       const pts = p.paragonAlloc[perk.id] ?? 0;
       if (pts > 0) totals[perk.stat] = (totals[perk.stat] ?? 0) + perk.per * pts;
     }
+    // Codex chapter boons — permanent, account-wide, granted while a chapter is complete
+    addStats(totals, codexChapterBonuses(p.codex.fragments ?? []));
     p.derived = totals;
     p.maxHp = maxHpFor(p.vit, p.level, totals.maxHp ?? 0);
     p.hp = Math.min(p.hp, p.maxHp);
@@ -2644,6 +2803,7 @@ export class DungeonRoom extends Room<DungeonState> {
       return; // nowhere to put it
     }
 
+    if (!item.unidentified) this.recordRelic(p, client.sessionId, item); // shelf/ground relics arrive named
     this.state.loot.delete(msg.id);
     this.broadcast("pickedup", { id: msg.id, by: client.sessionId });
     this.sendLoadout(client, p);
@@ -4101,6 +4261,9 @@ export class DungeonRoom extends Room<DungeonState> {
       this.broadcast("death", { t: "m", id, kind: m.kind, x: m.x, y: m.y });
       this.state.monsters.delete(id);
 
+      // the Codex remembers: every present account records the kill (and any boss fragment)
+      this.recordKill(m);
+
       // Plaguecarrier: a withered host's death seeds the curse into everything around the corpse
       if (now < m.curseSpreadsUntil) {
         const spreadTo: Monster[] = [];
@@ -4560,6 +4723,10 @@ export class DungeonRoom extends Room<DungeonState> {
       this.sendAltar(client); // opens the panel: recipes as buttons + the reforge list
       return;
     }
+    if (s.kind === "reliquary") {
+      this.sendCodex(client.sessionId, p, true); // the archive opens the Codex
+      return;
+    }
     if (s.kind === "cowportal") {
       s.used = true;
       this.pendingCow = true;
@@ -4685,6 +4852,16 @@ export class DungeonRoom extends Room<DungeonState> {
       }
       // the toucher reads the scene; everyone hears there was a story here
       this.broadcast("encounter", { id: enc.id, kind: enc.kind, by: client.sessionId });
+      return;
+    }
+
+    // set-pieces: a monument you can read any time — first read recovers its fragment (+XP)
+    if (s.kind === "setpiece") {
+      const sp = setpieceById(s.variant);
+      if (!sp) return;
+      const isNew = this.grantFragment(p, client.sessionId, sp.fragmentId);
+      if (isNew) this.grantXp(p, client.sessionId, ENCOUNTER_XP_BASE * this.danger());
+      client.send("setpiece", { id: sp.id }); // opens the inscription for the reader
       return;
     }
 

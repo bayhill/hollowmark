@@ -36,6 +36,7 @@ import {
   isInTown,
   mercClassById,
   encounterById,
+  setpieceById,
   townNpcById,
 } from "@hollowmark/common";
 import type { TownBuilding, TownStyle } from "@hollowmark/common";
@@ -726,6 +727,16 @@ export class GameScene extends Phaser.Scene {
         this.myAtkSpd = msg.derived?.atkSpd ?? 0;
         this.lastLoadout = msg;
         this.loadoutRev++;
+      });
+
+      // a set-piece: open its inscription for the reader (the fragment grant is codexlog'd separately)
+      room.onMessage("setpiece", (msg: any) => this.ui?.openSetpieceDialogue(msg.id));
+      // the Codex: account-wide bestiary/chronicle/relics, pushed on join, on change, and on open
+      room.onMessage("codex", (msg: any) => this.ui?.setCodex(msg));
+      room.onMessage("codexlog", (msg: any) => {
+        const me = this.players.get(this.room?.sessionId ?? "");
+        if (me) this.floatText(me.schema.x, me.schema.y - 26, msg.text, "#c9b8e8");
+        this.sfx.page();
       });
 
       room.onMessage("heal", (msg: any) => {
@@ -2570,7 +2581,9 @@ export class GameScene extends Phaser.Scene {
       : s.kind === "storyteller" ? 0xc9a44a // warm lantern-gold for the elder
       : s.kind === "barkeep" ? 0xe0a850 // hearth-amber for the indoor folk
       : s.kind === "encounter" ? 0x8a7ab0 // a wan, uncertain glow
+      : s.kind === "setpiece" ? 0xb0a07a // a monument's weathered, dusty light
       : s.kind === "areaportal" ? 0xc8a860 // lantern-gold doorways
+      : s.kind === "reliquary" ? 0x9a7ad8 // the Archive's violet lamplight
       : theme.accent;
     const container = this.add.container(sc.x, sc.y).setDepth(sc.y);
 
@@ -2884,6 +2897,65 @@ export class GameScene extends Phaser.Scene {
       const spine = this.add.rectangle(-6, -7, 3, 10, 0x8a6a3a);
       parts.push(book, spine);
       clickable = book;
+    } else if (s.kind === "reliquary") {
+      // the Archive: a stone lectern holding an open tome, lit from within
+      const post = this.add.rectangle(0, -8, 4, 14, 0x4a4256).setStrokeStyle(1, 0x2a2436);
+      const foot = this.add.ellipse(0, -1, 14, 5, 0x3a3446).setStrokeStyle(1, 0x241f30);
+      const slope = this.add.rectangle(0, -17, 18, 4, 0x5a5068).setStrokeStyle(1, 0x2a2436).setRotation(-0.12);
+      const pageL = this.add.rectangle(-4, -19, 8, 9, 0xe8e0f4).setStrokeStyle(1, 0x9a8fb0).setRotation(-0.12);
+      const pageR = this.add.rectangle(4, -18, 8, 9, 0xd8cfec).setStrokeStyle(1, 0x9a8fb0).setRotation(-0.12);
+      const glow = this.add.ellipse(0, -20, 12, 9, 0xb49ae8, 0.5);
+      parts.push(foot, post, slope, pageL, pageR, glow);
+      this.tweens.add({ targets: glow, alpha: 0.2, duration: 1200, yoyo: true, repeat: -1, ease: "sine.inout" });
+      clickable = slope;
+    } else if (s.kind === "setpiece") {
+      // a standing scene you walk past and read — drawn per the set-piece's look
+      const look = setpieceById(s.variant)?.variant ?? "cairn";
+      if (look === "altar") {
+        // a Ternion altar-stone: a low block crowned with a faint ring of threes
+        const block = this.add.rectangle(0, -7, 20, 12, 0x4a4842).setStrokeStyle(1.5, 0x2a2824);
+        const top = this.add.ellipse(0, -13, 20, 7, 0x585650).setStrokeStyle(1, 0x2a2824);
+        const r1 = this.add.circle(-5, -14, 1.8, 0xb49ae8, 0.9);
+        const r2 = this.add.circle(5, -14, 1.8, 0xb49ae8, 0.9);
+        const r3 = this.add.circle(0, -11, 1.8, 0xb49ae8, 0.9);
+        parts.push(block, top, r1, r2, r3);
+        this.tweens.add({ targets: [r1, r2, r3], alpha: 0.35, duration: 1100, yoyo: true, repeat: -1, ease: "sine.inout" });
+        clickable = block;
+      } else if (look === "shroud") {
+        // a wrapped family: three seated bound shapes, tallest to smallest
+        const a = this.add.ellipse(-7, -9, 8, 16, 0xa89a7c).setStrokeStyle(1, 0x6a5e46);
+        const b2 = this.add.ellipse(0, -8, 7, 14, 0x9c8e70).setStrokeStyle(1, 0x6a5e46);
+        const cc = this.add.ellipse(6, -7, 6, 11, 0x90826a).setStrokeStyle(1, 0x6a5e46);
+        parts.push(a, b2, cc);
+        clickable = b2;
+      } else if (look === "ferry") {
+        // a drowned mooring: a leaning post, a crossarm, a dead lantern
+        const post = this.add.rectangle(0, -12, 3, 24, 0x4a3826).setStrokeStyle(1, 0x2a1e12).setRotation(0.08);
+        const arm = this.add.rectangle(4, -20, 12, 2.5, 0x4a3826).setRotation(0.08);
+        const rope = this.add.rectangle(9, -14, 1, 10, 0x6a5a3a);
+        const lantern = this.add.circle(9, -20, 2.6, 0x8a7a4a).setStrokeStyle(1, 0x3a2f18);
+        const water = this.add.ellipse(0, 0, 26, 8, 0x24303a, 0.5);
+        parts.push(water, post, arm, rope, lantern);
+        clickable = post;
+      } else if (look === "marker") {
+        // a sentry's grave: a sword planted through a shield, ash at its base
+        const ash = this.add.ellipse(0, -1, 20, 7, 0x3a3630, 0.6);
+        const shield = this.add.ellipse(0, -9, 12, 15, 0x5a5560).setStrokeStyle(1.5, 0x33303a);
+        const blade = this.add.rectangle(0, -16, 2.4, 22, 0xaab0b8).setStrokeStyle(1, 0x585e66);
+        const guard = this.add.rectangle(0, -22, 9, 2.2, 0x6a6a74);
+        const grip = this.add.rectangle(0, -27, 2.2, 5, 0x4a3826);
+        parts.push(ash, shield, blade, guard, grip);
+        clickable = shield;
+      } else {
+        // cairn: a stack of memorial stones with a small token on top
+        const s1 = this.add.ellipse(0, -3, 16, 7, 0x5a5650).setStrokeStyle(1, 0x33302a);
+        const s2 = this.add.ellipse(0, -9, 12, 6, 0x625e56).setStrokeStyle(1, 0x33302a);
+        const s3 = this.add.ellipse(0, -14, 8, 5, 0x6a665c).setStrokeStyle(1, 0x33302a);
+        const token = this.add.circle(0, -19, 2, 0xc8a860, 0.95);
+        parts.push(s1, s2, s3, token);
+        this.tweens.add({ targets: token, alpha: 0.5, duration: 1300, yoyo: true, repeat: -1, ease: "sine.inout" });
+        clickable = s2;
+      }
     } else {
       const pillar = this.add.rectangle(0, -16, 8, 28, 0x3a3a46).setStrokeStyle(1, accent, 0.8);
       const orb = this.add.circle(0, -32, 5, accent, 0.95);

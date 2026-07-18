@@ -15,7 +15,14 @@ import {
   topicPages,
   shrineNpcId,
   encounterById,
+  setpieceById,
   isBossKind,
+  BESTIARY,
+  CODEX_CHAPTERS,
+  LORE_FRAGMENTS,
+  RELIC_LORE,
+  chapterFragments,
+  chapterComplete,
   mercClassById,
   skillById,
   visualThemeIndexForFloor,
@@ -57,6 +64,14 @@ export class UIScene extends Phaser.Scene {
   private questBounds = new Phaser.Geom.Rectangle(0, 0, 0, 0);
   private questTab = 0; // selected act in the quest log; 0 = auto-pick latest act with quests
   questsVisible = false;
+
+  // the Codex — the account's remembered world (bestiary / chronicle / relics)
+  private codexRoot?: Phaser.GameObjects.Container;
+  private codexBounds = new Phaser.Geom.Rectangle(0, 0, 0, 0);
+  private codexTab = 0; // 0 Bestiary · 1 Chronicle · 2 Relics
+  codexVisible = false;
+  private codex: { bestiary: Record<string, number>; fragments: string[]; relics: string[] } = { bestiary: {}, fragments: [], relics: [] };
+
   private trackedQuestId: string | null = localStorage.getItem("arpg_tracked_quest");
   private trackerRoot?: Phaser.GameObjects.Container;
   private partyRoot?: Phaser.GameObjects.Container;
@@ -243,6 +258,7 @@ export class UIScene extends Phaser.Scene {
       this.mapMode = (this.mapMode + 1) % 3; // minimap → full map → hidden
     });
     this.input.keyboard?.on("keydown-J", () => !this.chatActive && this.toggleQuests());
+    this.input.keyboard?.on("keydown-K", () => !this.chatActive && this.toggleCodex());
     this.input.keyboard?.on("keydown-H", () => !this.chatActive && this.toggleMercPanel());
     // U hides the top info bar — for a cleaner, more immersive screen
     this.input.keyboard?.on("keydown-U", () => !this.chatActive && this.hud.setVisible(!this.hud.visible));
@@ -281,6 +297,7 @@ export class UIScene extends Phaser.Scene {
     if (this.charPanel?.containsPoint(x, y)) return true;
     if (this.skillPanel?.containsPoint(x, y)) return true;
     if (this.questsVisible && this.questBounds.contains(x, y)) return true;
+    if (this.codexVisible && this.codexBounds.contains(x, y)) return true;
     if (this.shopVisible && this.shopBounds.contains(x, y)) return true;
     if (this.vendorVisible && this.vendorBounds.contains(x, y)) return true;
     if (this.gambleVisible && this.gambleBounds.contains(x, y)) return true;
@@ -862,6 +879,211 @@ export class UIScene extends Phaser.Scene {
   }
 
   // play a dungeon encounter's vignette (no menu — just paged text)
+  // ---- The Codex: bestiary / chronicle / relics, the account's remembered world ----
+
+  // server pushes the account's Codex on join, on any change, and when the Reliquary is opened
+  setCodex(msg: { bestiary?: Record<string, number>; fragments?: string[]; relics?: string[]; open?: boolean }) {
+    this.codex = {
+      bestiary: msg.bestiary ?? {},
+      fragments: msg.fragments ?? [],
+      relics: msg.relics ?? [],
+    };
+    if (msg.open && !this.codexVisible) this.openCodex();
+    else if (this.codexVisible) this.rebuildCodexPanel();
+  }
+
+  toggleCodex() {
+    if (this.codexVisible) this.closeCodex();
+    else this.openCodex();
+  }
+
+  private openCodex() {
+    this.codexVisible = true;
+    this.rebuildCodexPanel();
+    this.page();
+  }
+
+  closeCodex() {
+    this.codexVisible = false;
+    this.codexRoot?.destroy();
+    this.codexRoot = undefined;
+  }
+
+  // open a Codex entry's prose in the shared dialogue window (paged, space/click to advance)
+  private showCodexEntry(name: string, pages: string[]) {
+    this.dlgNpc = { id: "codex", name };
+    this.dlgTopics = [];
+    this.dlgPages = pages.filter(Boolean);
+    this.dlgPageIdx = 0;
+    this.dlgReturn = "close";
+    this.dlgMode = "text";
+    this.dialogueVisible = true;
+    this.rebuildDialogue();
+    this.page();
+  }
+
+  private rebuildCodexPanel() {
+    this.codexRoot?.destroy();
+    const W = 380;
+    const x = Math.round(this.scale.width / 2 - W / 2);
+    const y = 56;
+    const root = this.add.container(x, y).setDepth(20);
+    const rows: Phaser.GameObjects.GameObject[] = [];
+
+    const TABS = ["BESTIARY", "CHRONICLE", "RELICS"];
+    const tabH = 24;
+    const tabTop = 40;
+    const tabGap = 6;
+    const tabW = (W - 28 - (TABS.length - 1) * tabGap) / TABS.length;
+    const tabX0 = 14;
+    TABS.forEach((t, i) => {
+      const tx = tabX0 + i * (tabW + tabGap);
+      const on = i === this.codexTab;
+      const tabBg = this.add.rectangle(tx, tabTop, tabW, tabH, on ? 0x201a2a : 0x141220, on ? 1 : 0.8)
+        .setOrigin(0, 0)
+        .setStrokeStyle(1.5, on ? 0x9a7ad8 : 0x3a3242, 0.9)
+        .setInteractive({ useHandCursor: true });
+      tabBg.on("pointerover", () => { if (!on) tabBg.setFillStyle(0x1c1828, 0.9); });
+      tabBg.on("pointerout", () => { if (!on) tabBg.setFillStyle(0x141220, 0.8); });
+      tabBg.on("pointerdown", () => { this.codexTab = i; this.rebuildCodexPanel(); });
+      rows.push(tabBg, this.add.text(tx + tabW / 2, tabTop + tabH / 2, t, {
+        fontFamily: "monospace", fontSize: "12px", color: on ? "#c9b8e8" : "#8a8a96", fontStyle: "bold",
+      }).setOrigin(0.5));
+    });
+
+    const listTop = tabTop + tabH + 14;
+    let contentBottom = listTop;
+
+    if (this.codexTab === 0) {
+      // Bestiary — two columns, one line each, click a known kind to read it
+      const seenCount = BESTIARY.filter((e) => (this.codex.bestiary[e.kind] ?? 0) > 0).length;
+      rows.push(this.add.text(W / 2, listTop - 12, `recorded ${seenCount} / ${BESTIARY.length}`, {
+        fontFamily: "monospace", fontSize: "11px", color: "#7a6a9a",
+      }).setOrigin(0.5, 0));
+      const half = Math.ceil(BESTIARY.length / 2);
+      const colX = [14, W / 2 + 4];
+      const colW = W / 2 - 20;
+      const rowH = 17;
+      BESTIARY.forEach((e, i) => {
+        const col = i < half ? 0 : 1;
+        const rowIdx = i < half ? i : i - half;
+        const ry = listTop + 8 + rowIdx * rowH;
+        const kills = this.codex.bestiary[e.kind] ?? 0;
+        const seen = kills > 0;
+        const insight = seen && kills >= e.insightAt;
+        const color = !seen ? "#55505e" : insight ? "#c9a44a" : "#c3c3d0";
+        const label = seen ? `${insight ? "✦" : "•"} ${e.name}` : "• ??????";
+        rows.push(this.add.text(colX[col], ry, label, { fontFamily: "monospace", fontSize: "12px", color }).setOrigin(0, 0));
+        if (seen) {
+          rows.push(this.add.text(colX[col] + colW, ry, `×${kills}`, { fontFamily: "monospace", fontSize: "11px", color: "#7a7a86" }).setOrigin(1, 0));
+          const hit = this.add.rectangle(colX[col] + colW / 2, ry + 8, colW, rowH, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+          hit.on("pointerover", () => hit.setFillStyle(0xffffff, 0.05));
+          hit.on("pointerout", () => hit.setFillStyle(0xffffff, 0.001));
+          hit.on("pointerdown", () => this.showCodexEntry(e.name, insight ? [e.lore, `Insight — ${e.insight}`] : [e.lore, `You have not studied it enough to know its ways. (${kills}/${e.insightAt} slain)`]));
+          rows.push(hit);
+        }
+      });
+      contentBottom = listTop + 8 + half * rowH + 4;
+
+    } else if (this.codexTab === 1) {
+      // Chronicle — chapters and their fragments; a complete chapter is an active boon
+      let cy = listTop;
+      for (const ch of CODEX_CHAPTERS) {
+        const frags = chapterFragments(ch.id);
+        const have = frags.filter((f) => this.codex.fragments.includes(f.id)).length;
+        const done = chapterComplete(ch.id, this.codex.fragments);
+        rows.push(this.add.text(14, cy, `${done ? "✓ " : ""}${ch.name}`, {
+          fontFamily: "monospace", fontSize: "14px", color: done ? "#8ad07f" : "#c9b8e8", fontStyle: "bold",
+        }));
+        rows.push(this.add.text(W - 14, cy, `${have}/${frags.length}`, {
+          fontFamily: "monospace", fontSize: "13px", color: done ? "#8ad07f" : "#9a8fb0",
+        }).setOrigin(1, 0));
+        cy += 18;
+        rows.push(this.add.text(14, cy, done ? `active: ${ch.reward.desc}` : `reward: ${ch.reward.desc}`, {
+          fontFamily: "monospace", fontSize: "11px", color: done ? "#7a9a7e" : "#6a6a74", fontStyle: "italic",
+        }));
+        cy += 17;
+        for (const f of frags) {
+          const got = this.codex.fragments.includes(f.id);
+          rows.push(this.add.text(24, cy, got ? `• ${f.title}` : "• ??????", {
+            fontFamily: "monospace", fontSize: "12px", color: got ? "#c3c3d0" : "#55505e",
+          }));
+          if (got) {
+            const hit = this.add.rectangle(W / 2, cy + 7, W - 20, 15, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+            hit.on("pointerover", () => hit.setFillStyle(0xffffff, 0.05));
+            hit.on("pointerout", () => hit.setFillStyle(0xffffff, 0.001));
+            hit.on("pointerdown", () => this.showCodexEntry(f.title, [f.text]));
+            rows.push(hit);
+          }
+          cy += 16;
+        }
+        cy += 8;
+      }
+      contentBottom = cy;
+
+    } else {
+      // Relics — the story of every signature item you've carried
+      const got = RELIC_LORE.filter((r) => this.codex.relics.includes(r.name)).length;
+      rows.push(this.add.text(W / 2, listTop - 12, `catalogued ${got} / ${RELIC_LORE.length}`, {
+        fontFamily: "monospace", fontSize: "11px", color: "#7a6a9a",
+      }).setOrigin(0.5, 0));
+      let cy = listTop + 8;
+      const rowH = 18;
+      for (const r of RELIC_LORE) {
+        const found = this.codex.relics.includes(r.name);
+        rows.push(this.add.text(16, cy, found ? `◆ ${r.name}` : "◆ ??????", {
+          fontFamily: "monospace", fontSize: "13px", color: found ? "#c9a44a" : "#55505e",
+        }));
+        if (found) {
+          const hit = this.add.rectangle(W / 2, cy + 8, W - 20, rowH, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+          hit.on("pointerover", () => hit.setFillStyle(0xffffff, 0.05));
+          hit.on("pointerout", () => hit.setFillStyle(0xffffff, 0.001));
+          hit.on("pointerdown", () => this.showCodexEntry(r.name, [r.lore]));
+          rows.push(hit);
+        }
+        cy += rowH;
+      }
+      contentBottom = cy;
+    }
+
+    const footer = contentBottom + 6;
+    rows.push(this.add.text(W / 2, footer, "click a recorded entry to read it", {
+      fontFamily: "monospace", fontSize: "10px", color: "#6a6a74",
+    }).setOrigin(0.5, 0));
+    const H = footer + 22;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x0d0c14, 0.95);
+    bg.fillRoundedRect(0, 0, W, H, 6);
+    bg.lineStyle(2, 0x6a5a9a, 0.9);
+    bg.strokeRoundedRect(0, 0, W, H, 6);
+    bg.lineStyle(1, 0x3a2f52, 0.9);
+    bg.strokeRoundedRect(3, 3, W - 6, H - 6, 5);
+    const header = this.add.text(W / 2, 14, "— THE CODEX —", {
+      fontFamily: "monospace", fontSize: "16px", color: "#c9b8e8", fontStyle: "bold",
+    }).setOrigin(0.5, 0);
+    const closeX = this.add.text(W - 8, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
+      .setOrigin(1, 0).setInteractive({ useHandCursor: true }).on("pointerdown", () => this.closeCodex());
+    root.add([bg, header, closeX, ...rows]);
+    this.codexRoot = root;
+    this.codexBounds.setTo(x, y, W, H);
+  }
+
+  // a set-piece reads like an encounter vignette — paged inscription, no menu
+  openSetpieceDialogue(spId: string) {
+    const sp = setpieceById(spId);
+    if (!sp) return;
+    this.dlgNpc = { id: spId, name: sp.label };
+    this.dlgTopics = [];
+    this.dlgPages = sp.pages;
+    this.dlgPageIdx = 0;
+    this.dlgReturn = "close";
+    this.dlgMode = "text";
+    this.dialogueVisible = true;
+    this.rebuildDialogue();
+    this.page();
+  }
+
   openEncounterDialogue(encId: string) {
     const enc = encounterById(encId);
     if (!enc) return;
@@ -1597,13 +1819,14 @@ export class UIScene extends Phaser.Scene {
       }
       const anyPanel =
         this.panel.visible || this.charPanel.visible || this.skillPanel.visible ||
-        this.questsVisible || this.shopVisible || this.vendorVisible || this.gambleVisible ||
+        this.questsVisible || this.codexVisible || this.shopVisible || this.vendorVisible || this.gambleVisible ||
         this.smithVisible || this.mercHireVisible || this.mercVisible || this.tradeVisible || this.waypointsVisible;
       if (anyPanel) {
         if (this.panel.visible) this.panel.toggle();
         if (this.charPanel.visible) this.charPanel.toggle();
         if (this.skillPanel.visible) this.skillPanel.toggle();
         if (this.questsVisible) this.toggleQuests();
+        if (this.codexVisible) this.closeCodex();
         if (this.shopVisible) this.closeShop();
         if (this.vendorVisible) this.closeVendor();
         if (this.gambleVisible) this.closeGamble();

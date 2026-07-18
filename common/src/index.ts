@@ -131,6 +131,7 @@ export const TOWN = {
   bar: townTile(24, 2), // behind the tavern counter — the barkeep's post, indoors
   hearth: townTile(3, 2), // inside Senna's hut — a resident by the fire, indoors
   rift: townTile(17, 8), // the Rift obelisk — a doorway into the endless endgame
+  reliquary: townTile(21, 8), // the Archive — the Codex of everything this account remembers
 };
 
 // the alchemist sells flasks — click her to browse
@@ -3610,6 +3611,263 @@ export function rollEncounter(act: number, rng: () => number): Encounter | null 
   if (!from.length) return null;
   return from[Math.floor(rng() * from.length)];
 }
+
+// --- The Codex: the world remembers what you have seen, slain, and carried ---
+//
+// Three books, kept in the Reliquary in every town and shared across all a
+// player's heroes (account-wide, like the shared stash):
+//   • the Bestiary   — every kind you kill records an entry; a kill-count
+//                       milestone unlocks a deeper insight into the thing.
+//   • the Chronicle  — lore fragments recovered in the dark, grouped into
+//                       chapters; completing a chapter is a permanent boon.
+//   • the Reliquary  — the in-world story of each signature relic you find.
+
+export interface BestiaryEntry {
+  kind: string; // matches Monster.kind (a MonsterKind or a boss kind)
+  name: string; // display name
+  lore: string; // unlocked on the first kill
+  insightAt: number; // kills needed to unlock the insight
+  insight: string; // the deeper truth — read once the count is met
+}
+
+export interface LoreFragment {
+  id: string;
+  chapter: string; // the CodexChapter.id it belongs to
+  title: string;
+  text: string;
+  bossKind?: string; // Stage 1 source: felling this boss recovers the fragment
+  // (Stage 2 will add set-piece sources; a fragment with no source simply waits)
+}
+
+export interface CodexChapter {
+  id: string;
+  name: string;
+  blurb: string;
+  reward: { stats: ItemStats; desc: string }; // account-wide, granted while complete
+}
+
+export interface RelicLore {
+  name: string; // matches a unique/set Item.name exactly
+  lore: string;
+}
+
+// the account-wide save shape (mirrored in the server's Account.codex)
+export interface CodexState {
+  bestiary?: Record<string, number>; // kind → total kills
+  fragments?: string[]; // recovered fragment ids
+  relics?: string[]; // discovered relic (item) names
+}
+
+// ---- the Bestiary: one entry per living (and unliving) kind ----
+export const BESTIARY: BestiaryEntry[] = [
+  // Act I — the Mournfield
+  { kind: "imp", name: "Imp", lore: "Small, pale, and quick — they travel in shrieking packs and lose their nerve the instant a packmate falls.", insightAt: 25, insight: "Kill one and the rest may scatter: break their morale and the swarm breaks with it." },
+  { kind: "spineback", name: "Spineback", lore: "A hunched thing bristling with barbed quills, which it spits from range and then skitters away to spit again.", insightAt: 20, insight: "It kites by design — close the gap or corner it; standing at mid-range is exactly what it wants." },
+  { kind: "zombie", name: "The Shambling Dead", lore: "Hollowmere's own, dug up and set walking. Slow, patient, and endless.", insightAt: 30, insight: "Their camps refill if left alone — clear a nest fully or don't bother." },
+  { kind: "skeleton", name: "Risen Bones", lore: "Marrow-dry soldiers of a war nobody living remembers, drilled into ranks by something below.", insightAt: 30, insight: "Something down here still gives them orders. The Chronicle asks who." },
+  { kind: "archer", name: "Bonebow Archer", lore: "Skeletal marksmen that hang at the back of a pack and punish anyone who charges the front.", insightAt: 20, insight: "Deal with the archers first; the melee is only bait to hold you in their line of fire." },
+  { kind: "cultist", name: "Hollow Cultist", lore: "Robed devotees who chose the dark on purpose, and are proud of the choosing.", insightAt: 20, insight: "They died believing the brothers would remember them. The brothers did not." },
+  { kind: "goatman", name: "Goatman Reaver", lore: "Horned brutes of the deep wood, all muscle and bad temper, that hit far harder than their size warns.", insightAt: 15, insight: "A single reaver can spike your health bar in two blows — never facetank a pack of them." },
+  { kind: "goblin", name: "Treasure Goblin", lore: "It does not fight. It flees, sack clutched to its chest, and vanishes through a rip in the air if you dawdle.", insightAt: 3, insight: "Nine seconds and it portals out. Commit to the chase the instant you see it — hesitation is a lost hoard." },
+
+  // Act I — the Cathedral floors
+  { kind: "wraith", name: "Cathedral Wraith", lore: "A smear of cold grief that drifts the nave, harmless-looking until it is upon you.", insightAt: 20, insight: "They ignore walls and terrain. Line of sight is no safety." },
+  { kind: "gargoyle", name: "Roost Gargoyle", lore: "Stone until you are close, then not stone at all.", insightAt: 15, insight: "They wake in groups. Waking one usually means waking the whole ledge." },
+
+  // Act I / Hell — demons
+  { kind: "demon", name: "Lesser Demon", lore: "Squat, red, and full of fire — the rank and file of everything worse below.", insightAt: 20, insight: "Their blows carry fire; fire resistance blunts them far more than armor does." },
+  { kind: "succubus", name: "Succubus", lore: "Beautiful at a distance, and the distance is the trap — she calls fire down from across the room.", insightAt: 15, insight: "A ranged burner. Break line of sight or close fast; trading shots is a losing trade." },
+  { kind: "hellion", name: "Hellion", lore: "A four-legged furnace that closes distance in a heartbeat and burns what it catches.", insightAt: 15, insight: "It's faster than you. Save a movement skill or a slow for the moment it commits." },
+
+  // Act II — the Sunscar Wastes
+  { kind: "scarab", name: "Tomb Scarab", lore: "Fist-sized, iridescent, and never alone — they boil up out of the sand in numbers.", insightAt: 30, insight: "Individually nothing; in a swarm, a wall of chip damage. Area attacks earn their keep here." },
+  { kind: "sandserpent", name: "Sand Serpent", lore: "It swims the dunes and surfaces beneath your feet, all jaw and no warning.", insightAt: 20, insight: "It surfaces where you stand. Keep moving and its lunge finds empty sand." },
+  { kind: "entombed", name: "The Entombed", lore: "Zerath's wrapped dead, preserved rather than buried, walking because the Queen was thorough.", insightAt: 25, insight: "\"She means to wear it all. Every green thing. Including us.\" — an embalmer's last note." },
+  { kind: "duneprowler", name: "Dune Prowler", lore: "A lean desert hunter that circles the edge of your vision and rushes the moment you turn your back.", insightAt: 20, insight: "It waits for you to commit elsewhere. Don't give it your back in an open room." },
+  { kind: "carrionbird", name: "Carrion Bird", lore: "They wheel over the wastes wherever something is dying, and are not above hastening it.", insightAt: 20, insight: "Fast and evasive — a good test of whether your ranged option can actually connect." },
+
+  // Act III — the Drowned Green
+  { kind: "mudling", name: "Mudling", lore: "A gob of animate silt that pulls itself out of the bog and reaches for the warm.", insightAt: 30, insight: "They come from the water endlessly. The ground itself is the spawner." },
+  { kind: "blowreed", name: "Blowreed Stalker", lore: "It hides among the reeds and blows a dart of bog-toxin before you ever see it.", insightAt: 20, insight: "First hit often comes from cover. Poison ticks after — clear the reeds, don't wade blind." },
+  { kind: "riverfang", name: "Riverfang", lore: "The river's teeth. It sobs like a lost child to draw you to the water's edge.", insightAt: 15, insight: "The crying is bait. Anything weeping in the black water is already the trap." },
+  { kind: "vinehorror", name: "Vine Horror", lore: "The drowned green given a will — a knot of thorned vine that lashes and grabs.", insightAt: 15, insight: "It roots and reaches; its range is longer than it looks. Respect the lash." },
+  { kind: "bogwitch", name: "Bogwitch", lore: "A hag of the Mirefall shallows who curses from afar and cackles while you rot.", insightAt: 15, insight: "A caster — her hexes outrange her cackle. Silence her first or eat the curse." },
+
+  // Act IV — the Hollow Throne
+  { kind: "ashfiend", name: "Ashfiend", lore: "Born of the ashfall over the Last Vigil, it leaves cinders where it steps.", insightAt: 20, insight: "The ground it walks stays hot. Fire resistance is not optional this deep." },
+  { kind: "doomguard", name: "Doomguard", lore: "Armored dead of Uldrath's last garrison, still standing the watch they died standing.", insightAt: 15, insight: "Heavy armor, heavy blows. A slow, patient fight — or a swift death if you rush it." },
+  { kind: "flamecaller", name: "Flamecaller", lore: "A robed adept who trades its own burning for the privilege of burning you.", insightAt: 15, insight: "It calls fire from range and never closes. Hunt it down; it will not come to you." },
+  { kind: "flayed", name: "The Flayed", lore: "What Malgrim's mercy looks like — the skinned faithful, kept alive past all reason.", insightAt: 15, insight: "\"I remember the light. I chose this.\" They did not all get a choice." },
+  { kind: "bovine", name: "Hell Bovine", lore: "It should not be here. It is here. It is furious, and it is not alone.", insightAt: 10, insight: "There is no meadow. There has never been a meadow. Moo." },
+
+  // Bosses
+  { kind: "flenser", name: BOSS_NAMES.flenser, lore: "Butcher of the cathedral steps, who kept his hooks and lost everything else.", insightAt: 3, insight: "\"Meat for the hooks!\" — fast, brutal, and never subtle. Bring life on hit or bring a fast exit." },
+  { kind: "corvessa", name: BOSS_NAMES.corvessa, lore: "The Carrion Bride, pale and singing, who took the Wardens down the nave one by one.", insightAt: 3, insight: "She kites and her arrows chill. Corner her — a bride who can keep her distance never stops singing." },
+  { kind: "maggotqueen", name: BOSS_NAMES.maggotqueen, lore: "Mother of the brood, vast and patient, birthing the writhing dark of the deep caves.", insightAt: 3, insight: "Kill the broodlings or drown in them. The Queen is the least of your problems while they live." },
+  { kind: "vessira", name: BOSS_NAMES.vessira, lore: "The Thorned Maiden, who plants a wound in everything she meets and waits for it to bloom.", insightAt: 3, insight: "\"Every wound you carry, I planted.\" Her venom nova rewards standing still — so don't." },
+  { kind: "vuruk", name: BOSS_NAMES.vuruk, lore: "The White Maw, a charging cold that carries the winter in every blow.", insightAt: 3, insight: "His hits chill and his charge closes range instantly. Cold resistance turns a death into a fight." },
+  { kind: "orvath", name: BOSS_NAMES.orvath, lore: "The Grudge Eternal, who keeps his distance and lets his spite do the walking.", insightAt: 3, insight: "\"Spite outlives the spine.\" He orbits and hurls lightning — chase him down or be chipped to nothing." },
+  { kind: "nyzat", name: BOSS_NAMES.nyzat, lore: "The Embalmed Queen of Zerath, who wore the sand a thousand years and means to wear the rest.", insightAt: 3, insight: "Ruler beneath the Necropolis. Everything wrapped in the wastes rose at her word." },
+  { kind: "ssarim", name: BOSS_NAMES.ssarim, lore: "The Drowned God at the heart of the Ziggurat, to whom the river only ever asks once.", insightAt: 3, insight: "Act III's ruler. The flood that came and stayed came for him." },
+  { kind: "malgrim", name: BOSS_NAMES.malgrim, lore: "The King of Dread, first of the three brother-kings, who trades in fear the way misers trade in gold.", insightAt: 3, insight: "His dread-fire nova telegraphs — a ring, a breath, then ruin. Leave the ring." },
+  { kind: "aldric", name: BOSS_NAMES.aldric, lore: "The Forsworn, the knight who saw the light clearly and turned from it anyway.", insightAt: 3, insight: "\"I remember the light. I chose this.\" A guilt that fights like a saint gone wrong." },
+  { kind: "uldrath", name: BOSS_NAMES.uldrath, lore: "The Unmaker, last of the Hollow Kings, waiting at the bottom of everything.", insightAt: 3, insight: "\"I am what remains when all else is finished.\" Fell him and the caravan road opens — and the Abyss beneath it." },
+  { kind: "bovax", name: BOSS_NAMES.bovax, lore: "Tyrant of a meadow that does not exist, king of a herd that should not be.", insightAt: 1, insight: "MOO." },
+];
+
+const BESTIARY_BY_KIND = new Map(BESTIARY.map((b) => [b.kind, b]));
+export function bestiaryEntry(kind: string): BestiaryEntry | undefined {
+  return BESTIARY_BY_KIND.get(kind);
+}
+
+// ---- the Chronicle: fragments grouped into chapters, each a permanent boon ----
+export const CODEX_CHAPTERS: CodexChapter[] = [
+  { id: "ch_mournfield", name: "Grief of the Mournfield", blurb: "How Act I fell: the butcher, the bride, and the maiden who plants wounds.", reward: { stats: { dmgPct: 3 }, desc: "+3% damage" } },
+  { id: "ch_deepcourts", name: "The Drowned Courts", blurb: "The rulers of the wastes and the green, and the brood between them.", reward: { stats: { allRes: 2 }, desc: "+2 all resistance" } },
+  { id: "ch_hollowkings", name: "The Hollow Kings", blurb: "Three brothers who traded their names to the dark and unmade the world from underneath.", reward: { stats: { maxHp: 15 }, desc: "+15 life" } },
+  { id: "ch_meadow", name: "The Hidden Meadow", blurb: "There is no meadow.", reward: { stats: { goldFind: 5 }, desc: "+5% gold find" } },
+  // Stage 2 — chapters filled by environmental set-pieces found in the floors, not by bosses
+  { id: "ch_ternion", name: "The Ternion Order", blurb: "The vanished alchemist-scholars who worked transmutation in threes — pieced together from what they left in the dark.", reward: { stats: { magicFind: 5 }, desc: "+5% magic find" } },
+  { id: "ch_folk", name: "The Fallen Folk", blurb: "Not kings, not monsters — the ordinary dead of each land, and the small things they left behind.", reward: { stats: { maxHp: 10 }, desc: "+10 life" } },
+];
+
+export const LORE_FRAGMENTS: LoreFragment[] = [
+  // ch_mournfield
+  { id: "frag_flenser", chapter: "ch_mournfield", bossKind: "flenser", title: "The Butcher's Ledger", text: "Hargol kept a tally on the cathedral wall, one cut per name. He ran out of wall long before he ran out of names." },
+  { id: "frag_corvessa", chapter: "ch_mournfield", bossKind: "corvessa", title: "The Bride's Song", text: "The Wardens who went down the nave went singing, because she asked them to, and they could not remember how to refuse." },
+  { id: "frag_vessira", chapter: "ch_mournfield", bossKind: "vessira", title: "The Maiden's Garden", text: "Every wound she opens is a seed. Given time and a warm host, it flowers. She is very patient about the flowering." },
+  // ch_deepcourts
+  { id: "frag_vuruk", chapter: "ch_deepcourts", bossKind: "vuruk", title: "The White Maw", text: "The cold that fills the Sunken Necropolis is not weather. It is Vuruk, breathing, somewhere below the sand." },
+  { id: "frag_nyzat", chapter: "ch_deepcourts", bossKind: "nyzat", title: "The Embalmer's Queen", text: "\"We do not bury Zerath. We preserve it. The gardens are to be wrapped, not mourned.\" She meant to wear it all." },
+  { id: "frag_orvath", chapter: "ch_deepcourts", bossKind: "orvath", title: "The Grudge Eternal", text: "Ask Orvath what he wants and he will not answer. He wanted something once. Now he only wants you to stop." },
+  { id: "frag_ssarim", chapter: "ch_deepcourts", bossKind: "ssarim", title: "The River's Question", text: "The flood that took Mirefall came, and stayed, and is staying. It only ever asked once, and Ssarim was the asking." },
+  { id: "frag_maggot", chapter: "ch_deepcourts", bossKind: "maggotqueen", title: "The Brood Hungers", text: "She does not fight so much as multiply. Every heartbeat down in the caves is another mouth she has made for you." },
+  // ch_hollowkings
+  { id: "frag_malgrim", chapter: "ch_hollowkings", bossKind: "malgrim", title: "Dread Itself", text: "Malgrim was the first to trade his name. He got dread in return, and gave it away freely ever after, to everyone." },
+  { id: "frag_aldric", chapter: "ch_hollowkings", bossKind: "aldric", title: "The Forsworn", text: "Aldric was no fool and no puppet. He saw the light clearly, weighed it, and set it down. That is the worst of it." },
+  { id: "frag_uldrath", chapter: "ch_hollowkings", bossKind: "uldrath", title: "The Unmaker", text: "\"I am what remains when all else is finished.\" The last brother does not rule the dark. He is what the dark is for." },
+  // ch_meadow
+  { id: "frag_bovax", chapter: "ch_meadow", bossKind: "bovax", title: "MOO", text: "There is no meadow. There is no herd. There is no peg-legged king of a kingdom that does not exist. Moo." },
+  // ch_ternion — recovered from set-pieces (no bossKind; a SETPIECE grants each)
+  { id: "frag_ternion_a", chapter: "ch_ternion", title: "The Rule of Threes", text: "\"Nothing is made from one thing, nor from two. Three El-runes become an Ond. Three failures become a proof. Three of us became the Order.\" The altar-stone still hums, faintly, waiting for a fourth thing to complete." },
+  { id: "frag_ternion_b", chapter: "ch_ternion", title: "The Cost Ledger", text: "A scholar's ledger, every transmutation double-entered — what went in, what came out, and a third column headed only 'PAID'. The entries in that column are not runes or gold. They are names. Some of them are the scholars' own." },
+  { id: "frag_ternion_c", chapter: "ch_ternion", title: "The Last Transmutation", text: "\"We have run out of lesser things to turn into greater ones. There is only one transmutation left that we have not dared. We will each become a third of it. If you are reading this, it worked, and you should run.\"" },
+  // ch_folk — one per act, the ordinary dead
+  { id: "frag_folk_1", chapter: "ch_folk", title: "The Token Cairn", text: "A cairn beside the trail, and on it the small things the fleeing left so the dead would have company: a wooden horse, a wedding ring, a milk-tooth in a twist of cloth. Nobody came back for any of it. Nobody came back at all." },
+  { id: "frag_folk_2", chapter: "ch_folk", title: "The Wrapped Family", text: "Three shapes seated together under the sand, wrapped with a care that outlived whoever did the wrapping — tallest to smallest, hands still joined down the row. The Queen preserves everything. She does not ask whether it wished to be kept." },
+  { id: "frag_folk_3", chapter: "ch_folk", title: "The Ferryman's Ledger", text: "A toll-ledger nailed to a drowned post, every passage marked paid, every passenger marked delivered. The last line reads: 'All aboard. None ashore. The far bank has moved again.' The ink under the water has not run in a hundred years." },
+  { id: "frag_folk_4", chapter: "ch_folk", title: "The Unsent Letter", text: "Tucked in a dead sentry's breastplate, a letter home: '—holding the wall, tell mother the ash is only ash, tell her we—' It stops there. The wall did not hold. The ash was never only ash. The letter never left the Vigil." },
+];
+
+const FRAGMENT_BY_ID = new Map(LORE_FRAGMENTS.map((f) => [f.id, f]));
+export function fragmentById(id: string): LoreFragment | undefined {
+  return FRAGMENT_BY_ID.get(id);
+}
+export function fragmentsForBoss(kind: string): LoreFragment[] {
+  return LORE_FRAGMENTS.filter((f) => f.bossKind === kind);
+}
+export function chapterFragments(chapterId: string): LoreFragment[] {
+  return LORE_FRAGMENTS.filter((f) => f.chapter === chapterId);
+}
+// a chapter is complete once every one of its fragments has been recovered
+export function chapterComplete(chapterId: string, have: readonly string[]): boolean {
+  const frags = chapterFragments(chapterId);
+  if (!frags.length) return false;
+  const set = new Set(have);
+  return frags.every((f) => set.has(f.id));
+}
+// the account-wide boon: sum the reward of every completed chapter
+export function codexChapterBonuses(have: readonly string[]): ItemStats {
+  const out: ItemStats = {};
+  for (const ch of CODEX_CHAPTERS) {
+    if (chapterComplete(ch.id, have)) addStats(out, ch.reward.stats);
+  }
+  return out;
+}
+
+// ---- the Reliquary: the story of each signature relic (curated, not exhaustive) ----
+export const RELIC_LORE: RelicLore[] = [
+  { name: "Hargol's Cleaver", lore: "The blade that made the cathedral steps famous. It still swings itself, a little, if you let your grip go loose." },
+  { name: "The Mummer's Crown", lore: "A jester's cap of the old court, worn by the last man to make a Hollow King laugh. He was not thanked for it." },
+  { name: "Winterclaw", lore: "A ring of frozen bone, taken from the finger of someone who reached for warmth in the wrong place." },
+  { name: "The Orphan Star", lore: "A gem with no setting and no maker's mark, older than the settings men later built for it. It remembers being a star." },
+  { name: "Kragmar's Face", lore: "Cast from the death-mask of a clan-father of the sacred peak. Wear it and the mountain looks out through your eyes." },
+  { name: "Vessira's Visage", lore: "Her face, or a mask of it — the difference stopped mattering the day she planted the first seed. It smiles when you bleed." },
+  { name: "Vuruk's Carapace", lore: "The White Maw's shed shell, still cold to the touch a hundred years on. The winter in it never agreed to leave." },
+  { name: "The Grudgestone", lore: "Orvath's spite, pressed into a single dark stone. It keeps a tally of everyone who ever wronged its bearer, and adds you." },
+  { name: "Nyzat's Lid", lore: "The lid of the Embalmed Queen's own jar. She does not need it anymore; she is wearing the world instead." },
+  { name: "Ssarim's Riverspine", lore: "A length of the Drowned God's spine, cool and wet and never drying. Hold it to your ear for the sound of the flood that stayed." },
+  { name: "The Unmaker's Edge", lore: "A sliver of whatever Uldrath became. It does not cut so much as end — the wound simply decides it was always there." },
+  { name: "The First Dawn", lore: "Forged in a light that has not been seen since Act IV began. It is warm. Down here, that alone is worth a war." },
+  { name: "The Bloodline", lore: "A greatsword passed hand to hand down a line that ended badly. Every owner is in it now, and they all want another turn." },
+  { name: "Bovax's Hide?", lore: "The hide of a tyrant of a meadow that does not exist. The question mark is part of the name. Do not ask. Moo." },
+];
+
+const RELIC_LORE_BY_NAME = new Map(RELIC_LORE.map((r) => [r.name, r]));
+export function relicLore(name: string): RelicLore | undefined {
+  return RELIC_LORE_BY_NAME.get(name);
+}
+
+// ---- Set-pieces: hand-authored scenes placed into procedural floors ----
+//
+// Where encounters are a fleeting shrine (read once, gone), a set-piece is a
+// standing monument you walk past — a wrecked wagon, a cairn of tokens, a
+// scholar's ruined altar — that tells a beat AND leaves a lore fragment behind
+// for the Codex. Act-scoped; the floor roll drops one that fits the land. Each
+// grants exactly one fragment (dedup is per-account, so a party all read freely).
+export interface SetPiece {
+  id: string;
+  act: number; // 1..4; 0 = any land
+  label: string; // the world-label above the scene
+  variant: "altar" | "cairn" | "shroud" | "ferry" | "marker"; // which drawing the client uses
+  fragmentId: string; // the lore fragment this scene recovers
+  pages: string[]; // the inscription, read in the dialogue window
+}
+
+export const SETPIECES: SetPiece[] = [
+  // the Ternion Order — their ruin spans the first three lands
+  { id: "sp_ternion_a", act: 1, label: "A scholar's altar-stone", variant: "altar", fragmentId: "frag_ternion_a", pages: [
+    "A low stone altar stands where no chapel ever was, its face cut with a ring of interlocking threes worn shallow by patient thumbs.",
+    "\"Nothing is made from one thing, nor from two,\" the inscription begins — the creed of the Ternion Order, who worked their transmutations in threes and vanished doing it.",
+  ]},
+  { id: "sp_ternion_b", act: 2, label: "An abandoned work-table", variant: "altar", fragmentId: "frag_ternion_b", pages: [
+    "Glass vessels, most shattered, a few still holding a finger of something that has not evaporated in a century. A ledger lies open, weighted with a cracked crucible.",
+    "Every transmutation is double-entered — what went in, what came out — and a third column, headed only 'PAID', that you wish you had not read.",
+  ]},
+  { id: "sp_ternion_c", act: 3, label: "The Order's last altar", variant: "altar", fragmentId: "frag_ternion_c", pages: [
+    "The third and last of the Ternion altars, sunk to its rim in bog-water, its ring of threes finally closed by a fourth mark scratched hastily across them all.",
+    "A final note is pinned beneath a jar of blue salt. It does not read like the others. It reads like a warning left by people who had run out of time to leave warnings.",
+  ]},
+  // the Fallen Folk — one memorial per land
+  { id: "sp_folk_1", act: 1, label: "A cairn of small things", variant: "cairn", fragmentId: "frag_folk_1", pages: [
+    "A cairn of grey stones beside the trail, and heaped upon it the small things the fleeing left behind — a wooden horse, a ring, a twist of cloth.",
+    "They are placed, not dropped. Someone meant the dead to have company. Someone had time for that, and then did not have time for anything else.",
+  ]},
+  { id: "sp_folk_2", act: 2, label: "A wrapped family", variant: "shroud", fragmentId: "frag_folk_2", pages: [
+    "Three wrapped shapes seated together under the lee of a dune, tallest to smallest, bound with a care that has outlasted the hands that bound them.",
+    "Their wrapped hands are still joined, down the row. Zerath preserves everything. It was never asked whether it wished to be kept.",
+  ]},
+  { id: "sp_folk_3", act: 3, label: "A drowned mooring", variant: "ferry", fragmentId: "frag_folk_3", pages: [
+    "A mooring post juts from the black shallows, a toll-ledger still nailed to it, a dead lantern still hung from its hook, patient for a ferry that is never putting in.",
+    "Every passage marked paid. Every passenger marked delivered. The last line: 'All aboard. None ashore. The far bank has moved again.'",
+  ]},
+  { id: "sp_folk_4", act: 4, label: "A sentry's rest", variant: "marker", fragmentId: "frag_folk_4", pages: [
+    "A sword planted point-down through a fallen sentry's shield, the only grave-marker the Vigil had time to give, ash drifting into the seams of the plate.",
+    "There is a letter tucked in the breastplate, half-written, telling someone at home that the ash is only ash. It is not only ash. It never was.",
+  ]},
+];
+
+const SETPIECE_BY_ID = new Map(SETPIECES.map((s) => [s.id, s]));
+export function setpieceById(id: string): SetPiece | undefined {
+  return SETPIECE_BY_ID.get(id);
+}
+// pick a set-piece that belongs to this land (or anywhere)
+export function rollSetpiece(act: number, rng: () => number): SetPiece | null {
+  const pool = SETPIECES.filter((s) => s.act === act || s.act === 0);
+  if (!pool.length) return null;
+  return pool[Math.floor(rng() * pool.length)];
+}
+export const SETPIECE_CHANCE = 0.4; // a monument stands on many, not all, floors
 
 // --- identify: the suspense between the beam and the name ---
 
