@@ -558,9 +558,9 @@ export class UIScene extends Phaser.Scene {
 
   private rebuildAltar() {
     this.altarRoot?.destroy();
-    const W = 400;
-    const recipeRowH = 30;
-    const rowH = 48;
+    const W = 452;
+    const recipeRowH = 32;
+    const rowH = 50;
     const gold = this.myGold();
     const rc = this.altarData.recipes ?? {};
     const reforge = this.altarData.reforge ?? [];
@@ -1380,10 +1380,10 @@ export class UIScene extends Phaser.Scene {
     const acts = [...byAct.keys()].sort((a, b) => a - b);
     let rowCount = 0;
     for (const a of acts) rowCount += 1 + byAct.get(a)!.length;
-    const W = 320;
-    const H = Math.min(this.scale.height - 100, 80 + rowCount * 22 + 30);
+    const W = 376;
+    const H = Math.min(this.scale.height - 80, 84 + rowCount * 24 + 30);
     const root = this.buildStorefront(W, H, "THE WAYPOINT NETWORK", 0x4a5ac0, "#8ab0ff", () => this.closeWaypoints());
-    let cy = 46;
+    let cy = 50;
     for (const a of acts) {
       const locked = a > data.actsUnlocked;
       byAct.get(a)!.sort((x, y) => x - y);

@@ -90,23 +90,31 @@ const SLOT_GLYPH: Record<string, string> = {
   charm: "CHM",
 };
 
-// paper-doll layout: 3x3
-const EQUIP_LAYOUT: Array<{ slot: EquipSlot; label: string; col: number; row: number }> = [
-  { slot: "weapon", label: "weapon", col: 0, row: 0 },
-  { slot: "helm", label: "helm", col: 1, row: 0 },
-  { slot: "offhand", label: "offhand", col: 2, row: 0 },
-  { slot: "ring1", label: "ring 1", col: 0, row: 1 },
-  { slot: "chest", label: "chest", col: 1, row: 1 },
-  { slot: "ring2", label: "ring 2", col: 2, row: 1 },
-  { slot: "belt", label: "belt", col: 0, row: 2 },
-  { slot: "boots", label: "boots", col: 1, row: 2 },
-  { slot: "amulet", label: "amulet", col: 2, row: 2 },
+// paper-doll layout: slots flank the figure in two side columns (centre kept clear so the
+// drawn silhouette is fully visible), boots at the feet. col: -1 left / 0 centre / +1 right.
+const DOLL_LAYOUT: Array<{ slot: EquipSlot; label: string; col: -1 | 0 | 1; row: number }> = [
+  { slot: "helm", label: "helm", col: -1, row: 0 }, // head height
+  { slot: "amulet", label: "amulet", col: 1, row: 0 }, // neck height
+  { slot: "weapon", label: "weapon", col: -1, row: 1 }, // main hand
+  { slot: "offhand", label: "offhand", col: 1, row: 1 }, // off hand
+  { slot: "chest", label: "chest", col: -1, row: 2 }, // torso
+  { slot: "belt", label: "belt", col: 1, row: 2 }, // waist
+  { slot: "ring1", label: "ring 1", col: -1, row: 3 },
+  { slot: "ring2", label: "ring 2", col: 1, row: 3 },
+  { slot: "boots", label: "boots", col: 0, row: 4 }, // feet
 ];
+const COLGAP = 92; // how far the side columns sit from centre — wide enough to reveal the figure
+const ROWGAP = 56;
+const DOLL_ROWS = 5; // 0 head … 4 feet
 
-const PANEL_W = 268;
-const STASH_W = 250; // extra panel width when the stash is open
+const PANEL_W = 372;
+const STASH_W = 264; // extra panel width when the stash is open
 const CELL = 46;
 const GAP = 8;
+
+// faint class-neutral tints for the paper-doll silhouette (kept monochrome — gothic, not colourful)
+const DOLL_TINT = 0x9a93a2;
+const DOLL_BACK = 0x161320;
 
 const STAT_LABELS: Record<keyof ItemStats, string> = {
   dmg: "damage",
@@ -166,6 +174,7 @@ export class InventoryPanel {
   private tooltip: Phaser.GameObjects.Container;
   private panelH = 0;
   private lastNearVendor = false;
+  private gearStatsOpen = false; // the gear-bonus readout is collapsed by default
 
   constructor(private scene: Phaser.Scene, private actions: PanelActions) {
     this.root = scene.add.container(0, 0).setScrollFactor(0).setDepth(1_000_005).setVisible(false);
@@ -579,6 +588,43 @@ export class InventoryPanel {
     });
   }
 
+  // a gothic silhouette standing in the clear centre — the body your gear is worn on
+  private drawDoll(cx: number, top: number) {
+    const g = this.scene.add.graphics();
+    const t = DOLL_TINT;
+    // a recessed niche so the figure reads as set into the panel
+    const niche = (DOLL_ROWS - 1) * ROWGAP + CELL + 14;
+    g.fillStyle(DOLL_BACK, 0.55);
+    g.fillRoundedRect(cx - 60, top - 8, 120, niche, 12);
+    g.lineStyle(1, 0x2c2740, 0.85);
+    g.strokeRoundedRect(cx - 60, top - 8, 120, niche, 12);
+    // a faint runic groundline the figure stands on
+    const footY = top + (DOLL_ROWS - 1) * ROWGAP + 6;
+    g.lineStyle(1, t, 0.3); g.strokeEllipse(cx, footY, 64, 14);
+
+    // the silhouette, drawn boldly now that the centre is clear (still monochrome pewter)
+    const H = top + 26; // head centre
+    g.fillStyle(t, 0.30);
+    g.fillCircle(cx, H, 17); // head
+    g.fillRect(cx - 6, H + 14, 12, 12); // neck
+    // torso: broad shoulders tapering to the waist
+    g.beginPath();
+    g.moveTo(cx - 34, H + 26); g.lineTo(cx + 34, H + 26);
+    g.lineTo(cx + 24, H + 118); g.lineTo(cx - 24, H + 118); g.closePath(); g.fillPath();
+    // arms reaching down toward the hand slots
+    g.fillStyle(t, 0.24);
+    g.beginPath(); g.moveTo(cx - 30, H + 30); g.lineTo(cx - 15, H + 32); g.lineTo(cx - 30, H + 116); g.lineTo(cx - 46, H + 112); g.closePath(); g.fillPath();
+    g.beginPath(); g.moveTo(cx + 30, H + 30); g.lineTo(cx + 15, H + 32); g.lineTo(cx + 30, H + 116); g.lineTo(cx + 46, H + 112); g.closePath(); g.fillPath();
+    // legs down to the boots
+    g.fillStyle(t, 0.28);
+    g.beginPath(); g.moveTo(cx - 22, H + 118); g.lineTo(cx - 4, H + 118); g.lineTo(cx - 6, footY - 6); g.lineTo(cx - 24, footY - 6); g.closePath(); g.fillPath();
+    g.beginPath(); g.moveTo(cx + 22, H + 118); g.lineTo(cx + 4, H + 118); g.lineTo(cx + 6, footY - 6); g.lineTo(cx + 24, footY - 6); g.closePath(); g.fillPath();
+    // definition: head outline + a belt line at the waist
+    g.lineStyle(1.5, t, 0.5); g.strokeCircle(cx, H, 17);
+    g.lineStyle(2, t, 0.4); g.beginPath(); g.moveTo(cx - 25, H + 118); g.lineTo(cx + 25, H + 118); g.strokePath();
+    this.root.add(g);
+  }
+
   private render() {
     this.root.removeAll(true);
     this.hideTooltip();
@@ -590,13 +636,16 @@ export class InventoryPanel {
     const py = 50;
     this.root.setPosition(px, py);
 
-    const cols = 4;
+    const cols = 5;
     const rows = Math.ceil(INVENTORY_SIZE / cols);
-    const equipRows = 3;
-    const gridTop = 34 + equipRows * (CELL + 17) + 14;
-    const derivedTop = gridTop + rows * (CELL + GAP) + 12;
+    const dollTop = 42;
+    const equipBottom = dollTop + (DOLL_ROWS - 1) * ROWGAP + CELL + 18; // slot rows + label
+    const gridTop = equipBottom + 24;
+    const derivedTop = gridTop + rows * (CELL + GAP) + 14;
     const lines = statLines(this.loadout.derived);
-    this.panelH = derivedTop + Math.max(1, lines.length) * 16 + 34;
+    const statRows = Math.max(1, Math.ceil(lines.length / 2)); // two columns when expanded
+    // collapsed: just the toggle row; expanded: the two-column readout below it
+    this.panelH = derivedTop + 18 + (this.gearStatsOpen ? statRows * 16 + 10 : 0) + 16;
 
     panelChrome(this.scene, this.root, totalW, this.panelH, { accent: ARCANE.violet, runes: false });
 
@@ -651,16 +700,18 @@ export class InventoryPanel {
       this.root.add(sep);
     }
 
-    // paper-doll equipment grid
-    const equipX0 = off + (PANEL_W - (3 * CELL + 2 * GAP)) / 2;
-    EQUIP_LAYOUT.forEach(({ slot, label, col, row }) => {
-      const x = equipX0 + col * (CELL + GAP);
-      const y = 34 + row * (CELL + 17);
+    // --- the paper-doll: your gear worn on a drawn figure, so position tells you the slot ---
+    const dollCx = off + PANEL_W / 2;
+    this.drawDoll(dollCx, dollTop);
+    DOLL_LAYOUT.forEach(({ slot, label, col, row }) => {
+      const x = Math.round(dollCx + col * COLGAP - CELL / 2);
+      const y = dollTop + row * ROWGAP;
       const item = this.loadout.equipment[slot] ?? null;
       const freeSocket = !!item?.sockets && (item.runes?.length ?? 0) + (item.jewels?.length ?? 0) < (item.sockets ?? 0);
       const canInsert = !!this.selectedRune && freeSocket;
+      const glyph = SLOT_GLYPH[slot === "ring1" || slot === "ring2" ? "ring" : slot] ?? "·";
       this.cell(
-        x, y, item, "·",
+        x, y, item, glyph,
         () => {
           if (canInsert && item) {
             this.actions.socket(this.selectedRune!, item.id);
@@ -673,9 +724,13 @@ export class InventoryPanel {
         canInsert ? "click: SEAT THE STONE" : "click: unequip"
       );
       this.root.add(
-        this.scene.add.text(x + CELL / 2, y + CELL + 2, label, { fontFamily: "monospace", fontSize: "11px", color: "#6a6a76" }).setOrigin(0.5, 0)
+        this.scene.add.text(x + CELL / 2, y + CELL + 1, label, { fontFamily: "monospace", fontSize: "10px", color: "#7a7486" }).setOrigin(0.5, 0)
       );
     });
+    // bag header
+    this.root.add(
+      this.scene.add.text(off + 12, gridTop - 20, "BAG", { fontFamily: "monospace", fontSize: "12px", color: ARCANE.dim, fontStyle: "bold" })
+    );
 
     // inventory grid
     for (let i = 0; i < INVENTORY_SIZE; i++) {
@@ -727,20 +782,35 @@ export class InventoryPanel {
       );
     }
 
-    // derived stat summary
-    this.root.add(
-      this.scene.add.text(off + 12, derivedTop, "FROM GEAR", { fontFamily: "monospace", fontSize: "13px", color: "#8a8a96", fontStyle: "bold" })
-    );
-    if (lines.length === 0) {
-      this.root.add(
-        this.scene.add.text(off + 12, derivedTop + 20, "nothing equipped", { fontFamily: "monospace", fontSize: "13px", color: "#4a4a56" })
-      );
+    // gear-bonus readout: collapsed by default (the full combat sheet also lives on [C])
+    const caret = this.gearStatsOpen ? "▾" : "▸";
+    const toggle = this.scene.add
+      .text(off + 12, derivedTop, `${caret} gear bonuses${lines.length ? ` (${lines.length})` : ""}`, {
+        fontFamily: "monospace", fontSize: "13px", color: "#8a9ab8", fontStyle: "bold",
+      })
+      .setInteractive({ useHandCursor: true });
+    toggle.on("pointerover", () => toggle.setColor("#c8d8f8"));
+    toggle.on("pointerout", () => toggle.setColor("#8a9ab8"));
+    toggle.on("pointerdown", () => { this.gearStatsOpen = !this.gearStatsOpen; this.render(); });
+    this.root.add(toggle);
+
+    if (this.gearStatsOpen) {
+      if (lines.length === 0) {
+        this.root.add(
+          this.scene.add.text(off + 12, derivedTop + 20, "nothing equipped", { fontFamily: "monospace", fontSize: "13px", color: "#4a4a56" })
+        );
+      }
+      // two columns so the readout stays compact
+      const perCol = Math.ceil(lines.length / 2);
+      lines.forEach((line, i) => {
+        const col = Math.floor(i / perCol);
+        const rowI = i % perCol;
+        const lx = off + 12 + col * Math.round((PANEL_W - 20) / 2);
+        this.root.add(
+          this.scene.add.text(lx, derivedTop + 20 + rowI * 16, line, { fontFamily: "monospace", fontSize: "12px", color: "#9fb09f" })
+        );
+      });
     }
-    lines.forEach((line, i) => {
-      this.root.add(
-        this.scene.add.text(off + 12, derivedTop + 20 + i * 16, line, { fontFamily: "monospace", fontSize: "13px", color: "#9fdc9f" })
-      );
-    });
   }
 }
 
@@ -769,7 +839,7 @@ export interface HeroState {
   paragonAlloc: Record<string, number>;
 }
 
-const CHAR_W = 300;
+const CHAR_W = 344;
 
 export class CharacterPanel {
   visible = false;
@@ -947,8 +1017,9 @@ export class CharacterPanel {
 
 // --- the skill tree: where builds are born ---
 
-const SKILL_W = 380;
-const NODE = 44;
+const NODE = 46;
+const NODE_GAP = 10;
+const TREE_PAD = 26; // breathing room inside each tree column
 
 export class SkillPanel {
   visible = false;
@@ -957,6 +1028,7 @@ export class SkillPanel {
   private root: Phaser.GameObjects.Container;
   private tooltip: Phaser.GameObjects.Container;
   private panelH = 0;
+  private panelW = 400; // computed per-render from the widest tier
   private cls: ClassName | "" = "";
   private level = 1;
   private points = 0;
@@ -1010,7 +1082,7 @@ export class SkillPanel {
   }
 
   containsPoint(x: number, y: number): boolean {
-    return this.visible && x >= 10 && x <= 10 + SKILL_W && y >= 50 && y <= 50 + this.panelH;
+    return this.visible && x >= 10 && x <= 10 + this.panelW && y >= 50 && y <= 50 + this.panelH;
   }
 
   private keyFor(id: string): SkillKey | null {
@@ -1141,22 +1213,31 @@ export class SkillPanel {
     const trees = [...new Set(nodes.map((n) => n.tree))];
     const maxTier = Math.max(...nodes.map((n) => n.tier));
 
-    const colW = (SKILL_W - 24) / trees.length;
-    const top = 66;
-    const rowH = NODE + 34;
-    this.panelH = top + maxTier * rowH + 8;
-    panelChrome(this.scene, this.root, SKILL_W, this.panelH, { accent: ARCANE.teal });
+    // size each tree column to the WIDEST tier it holds, so nodes never spill their column
+    let maxPerRow = 1;
+    for (const tree of trees) {
+      const byTier = new Map<number, number>();
+      for (const n of nodes) if (n.tree === tree) byTier.set(n.tier, (byTier.get(n.tier) ?? 0) + 1);
+      for (const c of byTier.values()) maxPerRow = Math.max(maxPerRow, c);
+    }
+    const colW = maxPerRow * (NODE + NODE_GAP) - NODE_GAP + TREE_PAD;
+    const W = Math.round(colW * trees.length + 24);
+    this.panelW = W;
+    const top = 70;
+    const rowH = NODE + 40;
+    this.panelH = top + maxTier * rowH + 10;
+    panelChrome(this.scene, this.root, W, this.panelH, { accent: ARCANE.teal });
     this.root.setPosition(10, 50);
 
     this.root.add(
       this.scene.add.text(12, 10, "SKILLS", { fontFamily: "monospace", fontSize: "16px", color: ARCANE.text, fontStyle: "bold" })
     );
     this.root.add(
-      this.scene.add.text(SKILL_W - 12, 12, "[S] close", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(1, 0)
+      this.scene.add.text(W - 12, 12, "[S] close", { fontFamily: "monospace", fontSize: "12px", color: "#6a6a76" }).setOrigin(1, 0)
     );
     // free respec — experiment freely; two-click confirm guards the misclick
     const respecBtn = this.scene.add
-      .text(SKILL_W - 12, 44, this.respecArmed ? "click again to confirm" : "↺ respec (free)", {
+      .text(W - 12, 44, this.respecArmed ? "click again to confirm" : "↺ respec (free)", {
         fontFamily: "monospace", fontSize: "12px", fontStyle: "bold",
         color: this.respecArmed ? "#ffd54a" : "#d89090",
         backgroundColor: this.respecArmed ? "#4a2a10cc" : "#2a1418aa", padding: { x: 5, y: 2 },
@@ -1181,7 +1262,7 @@ export class SkillPanel {
     if (this.bindPending) {
       const node = nodes.find((n) => n.id === this.bindPending);
       this.root.add(
-        this.scene.add.text(SKILL_W - 12, 28, `press 1-6 to bind ${node?.name ?? ""}`, {
+        this.scene.add.text(W - 12, 28, `press 1-6 to bind ${node?.name ?? ""}`, {
           fontFamily: "monospace", fontSize: "12px", color: "#ffd54a", fontStyle: "bold",
         }).setOrigin(1, 0)
       );
@@ -1207,7 +1288,7 @@ export class SkillPanel {
       byTier.forEach((tierNodes, tier) => {
         tierNodes.forEach((node, i) => {
           const perRow = tierNodes.length;
-          const x = cx + (colW - 12) / 2 - (perRow * (NODE + 8) - 8) / 2 + i * (NODE + 8);
+          const x = cx + (colW - 12) / 2 - (perRow * (NODE + NODE_GAP) - NODE_GAP) / 2 + i * (NODE + NODE_GAP);
           const y = top + (tier - 1) * rowH;
           pos.set(node.id, { x, y });
         });
