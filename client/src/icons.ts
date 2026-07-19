@@ -263,6 +263,37 @@ const DRAWERS: Record<string, (g: G) => void> = {
     g.fillStyle(IRON_D).fillRect(12, 26, 17, 4);
     g.fillStyle(STEEL).fillRect(13, 9, 6, 12); // shin plate
   },
+  gloves: (g) => {
+    g.fillStyle(LEATHER_D).fillRect(10, 25, 16, 6); // cuff
+    P(g, LEATHER, [[11, 14], [25, 14], [25, 27], [11, 27]]); // palm
+    g.fillStyle(LEATHER);
+    for (const x of [12, 16, 20, 23.5]) g.fillRect(x, 7, 3, 8); // fingers
+    P(g, LEATHER, [[8, 17], [11, 15], [11, 21], [8, 21]]); // thumb
+    g.fillStyle(LEATHER_D);
+    for (const x of [15, 19, 22.5]) g.fillRect(x, 7, 1, 8); // finger seams
+  },
+  gauntlets: (g) => {
+    g.fillStyle(IRON_D).fillRect(10, 25, 16, 6); // cuff
+    P(g, IRON, [[11, 14], [25, 14], [25, 27], [11, 27]]); // palm plate
+    g.fillStyle(IRON);
+    for (const x of [12, 16, 20, 23.5]) g.fillRect(x, 7, 3, 8); // fingers
+    P(g, IRON, [[8, 17], [11, 15], [11, 21], [8, 21]]); // thumb
+    g.fillStyle(STEEL);
+    for (const x of [12, 16, 20, 23.5]) g.fillRect(x, 13, 3, 2); // knuckle plates
+    g.fillStyle(IRON_D);
+    for (const x of [15, 19, 22.5]) g.fillRect(x, 7, 1, 8);
+  },
+  battlegloves: (g) => {
+    g.fillStyle(STEEL_D).fillRect(9, 25, 18, 6); // heavy cuff
+    P(g, STEEL, [[11, 13], [25, 13], [25, 27], [11, 27]]); // plated palm
+    g.fillStyle(STEEL);
+    for (const x of [12, 16, 20, 23.5]) g.fillRect(x, 6, 3, 9); // fingers
+    P(g, STEEL, [[8, 16], [11, 14], [11, 21], [8, 21]]); // thumb
+    g.fillStyle(GOLD);
+    for (const x of [13, 17, 21, 24.5]) g.fillCircle(x, 12.5, 1.4); // knuckle studs
+    g.fillStyle(STEEL_D);
+    for (const x of [15, 19, 22.5]) g.fillRect(x, 6, 1, 9);
+  },
   smallcharm: (g) => {
     P(g, 0x4a7ae8, [[18, 12], [23, 18], [18, 24], [13, 18]]);
     g.fillStyle(0x9ac8ff).fillCircle(17, 16, 1.5);

@@ -2260,11 +2260,11 @@ export const VOLCANO_TWIN_DELAY_MS = 420; // Cataclysm: the second eruption's de
 
 // --- items ---
 
-export type Slot = "weapon" | "offhand" | "helm" | "chest" | "ring" | "amulet" | "belt" | "boots";
+export type Slot = "weapon" | "offhand" | "helm" | "chest" | "gloves" | "ring" | "amulet" | "belt" | "boots";
 
 export type EquipSlot = Exclude<Slot, "ring"> | "ring1" | "ring2";
 export const EQUIP_SLOTS: EquipSlot[] = [
-  "weapon", "offhand", "helm", "chest", "ring1", "ring2", "amulet", "belt", "boots",
+  "weapon", "offhand", "helm", "chest", "gloves", "ring1", "ring2", "amulet", "belt", "boots",
 ];
 
 export function equipSlotFor(
@@ -2662,6 +2662,10 @@ export const BASE_ITEMS: Record<string, { name: string; slot: Slot; minIlvl: num
   // boots
   boots: { name: "Leather Boots", slot: "boots", minIlvl: 1, implicit: { moveSpd: 5 } },
   greaves: { name: "Greaves", slot: "boots", minIlvl: 4, implicit: { armor: 2, moveSpd: 5 } },
+  // gloves — the hands: quick to strike, and the classic home of attack speed
+  gloves: { name: "Leather Gloves", slot: "gloves", minIlvl: 1, implicit: { atkSpd: 4 } },
+  gauntlets: { name: "Gauntlets", slot: "gloves", minIlvl: 4, implicit: { armor: 2, atkSpd: 3 } },
+  battlegloves: { name: "Battle Gauntlets", slot: "gloves", minIlvl: 8, implicit: { armor: 4, atkSpd: 4 } },
 };
 
 interface AffixDef {
@@ -2868,6 +2872,14 @@ export const FIXED_ITEMS: Array<{ base: string; name: string; rarity: Rarity; st
   { base: "club", name: "Tempest's Kiss", rarity: "epic", stats: { dmg: 8, coldDmg: 8, moveSpd: 8, plusSkills: 1 }, effect: "knockback_shot", power: "twister_swarm" },
   { base: "quiver", name: "The Thousandfold Quiver", rarity: "epic", stats: { dmg: 6, atkSpd: 12, crit: 6, plusSkills: 1 }, effect: "twin_strike", power: "multi_volley" },
   { base: "greataxe", name: "Maelrend", rarity: "epic", stats: { dmg: 12, dmgPct: 28, fireDmg: 10, plusSkills: 1 }, effect: "berserk_low", power: "whirl_rend" },
+  // --- gloves: the hands — speed, crits, and the on-hit trick ---
+  { base: "gauntlets", name: "Gravekeeper's Grip", rarity: "unique", stats: { atkSpd: 12, crit: 4, dmg: 4 }, effect: "executioner" },
+  { base: "gloves", name: "The Fingersmith", rarity: "unique", stats: { atkSpd: 10, goldFind: 30, magicFind: 12 }, effect: "gold_burst" },
+  { base: "gauntlets", name: "The Flensing Hand", rarity: "unique", stats: { dmgPct: 15, lifeSteal: 3, atkSpd: 6 }, effect: "bleed" },
+  { base: "gloves", name: "Hoarfrost Knuckles", rarity: "unique", stats: { coldDmg: 5, atkSpd: 8, coldRes: 15 }, effect: "frostnova_on_hit" },
+  { base: "gauntlets", name: "Ashgrip Gauntlets", rarity: "legendary", stats: { fireDmg: 8, dmgPct: 20, atkSpd: 8, fireRes: 15 }, effect: "immolation" },
+  { base: "gloves", name: "The Quickening", rarity: "legendary", stats: { atkSpd: 22, crit: 6, moveSpd: 8 }, effect: "adrenaline" },
+  { base: "battlegloves", name: "The Titan's Grasp", rarity: "epic", stats: { dmgPct: 30, maxHp: 25, atkSpd: 10, crit: 6 }, effect: "giantslayer" },
 ];
 
 // --- item sets (green, D2-style: bonus for wearing the full set) ---
@@ -2912,6 +2924,13 @@ export const SETS: Record<string, ItemSet> = {
     bonus: { dmg: 10, maxHp: 50, thorns: 8 },
     effect: "executioner",
   },
+  reaver: {
+    name: "The Reaver's Rally",
+    pieces: 3,
+    partial: { count: 2, stats: { atkSpd: 8, crit: 3 } },
+    bonus: { atkSpd: 18, crit: 10, dmgPct: 22 },
+    effect: "adrenaline",
+  },
 };
 
 export const SET_ITEMS: Array<{ setId: string; base: string; name: string; stats: ItemStats }> = [
@@ -2929,6 +2948,9 @@ export const SET_ITEMS: Array<{ setId: string; base: string; name: string; stats
   { setId: "colossus", base: "maul", name: "Colossus Crusher", stats: { dmg: 9, maxHp: 15 } },
   { setId: "colossus", base: "plate", name: "Colossus Bulwark", stats: { armor: 8, maxHp: 20 } },
   { setId: "colossus", base: "warbelt", name: "Colossus Chain", stats: { armor: 4, maxHp: 15, thorns: 3 } },
+  { setId: "reaver", base: "gauntlets", name: "Reaver's Grip", stats: { atkSpd: 10, crit: 4 } },
+  { setId: "reaver", base: "waraxe", name: "Reaver's Edge", stats: { dmg: 6, atkSpd: 8 } },
+  { setId: "reaver", base: "cap", name: "Reaver's Snarl", stats: { crit: 4, moveSpd: 5 } },
 ];
 
 // --- charms (grant their stats while sitting in your inventory) ---

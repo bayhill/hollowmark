@@ -1863,12 +1863,12 @@ async function main() {
 
   // --- set expansion (pure) ---
   {
-    if (Object.keys(SETS).length !== 5) throw new Error(`expected 5 sets, got ${Object.keys(SETS).length}`);
-    for (const sid of ["conclave", "creed", "colossus"]) {
+    if (Object.keys(SETS).length !== 6) throw new Error(`expected 6 sets, got ${Object.keys(SETS).length}`);
+    for (const sid of ["conclave", "creed", "colossus", "reaver"]) {
       if (!SETS[sid]) throw new Error(`missing set ${sid}`);
       if (!SETS[sid].partial) throw new Error(`set ${sid} missing partial bonus`);
     }
-    console.log("set expansion: 5 sets, class sets carry partial bonuses");
+    console.log("set expansion: 6 sets (incl. the glove set), class sets carry partial bonuses");
   }
 
   // --- skill trees & attributes (pure) ---

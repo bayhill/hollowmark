@@ -83,6 +83,7 @@ const SLOT_GLYPH: Record<string, string> = {
   offhand: "OFF",
   helm: "HLM",
   chest: "CHS",
+  gloves: "GLV",
   ring: "RNG",
   amulet: "AMU",
   belt: "BLT",
@@ -93,15 +94,16 @@ const SLOT_GLYPH: Record<string, string> = {
 // paper-doll layout: slots flank the figure in two side columns (centre kept clear so the
 // drawn silhouette is fully visible), boots at the feet. col: -1 left / 0 centre / +1 right.
 const DOLL_LAYOUT: Array<{ slot: EquipSlot; label: string; col: -1 | 0 | 1; row: number }> = [
-  { slot: "helm", label: "helm", col: -1, row: 0 }, // head height
-  { slot: "amulet", label: "amulet", col: 1, row: 0 }, // neck height
+  { slot: "helm", label: "helm", col: -1, row: 0 }, // head
+  { slot: "amulet", label: "amulet", col: 1, row: 0 }, // neck
   { slot: "weapon", label: "weapon", col: -1, row: 1 }, // main hand
   { slot: "offhand", label: "offhand", col: 1, row: 1 }, // off hand
-  { slot: "chest", label: "chest", col: -1, row: 2 }, // torso
-  { slot: "belt", label: "belt", col: 1, row: 2 }, // waist
-  { slot: "ring1", label: "ring 1", col: -1, row: 3 },
-  { slot: "ring2", label: "ring 2", col: 1, row: 3 },
-  { slot: "boots", label: "boots", col: 0, row: 4 }, // feet
+  { slot: "gloves", label: "gloves", col: -1, row: 2 }, // hands
+  { slot: "ring1", label: "ring 1", col: 1, row: 2 },
+  { slot: "chest", label: "chest", col: -1, row: 3 }, // torso
+  { slot: "belt", label: "belt", col: 1, row: 3 }, // waist
+  { slot: "boots", label: "boots", col: -1, row: 4 }, // feet
+  { slot: "ring2", label: "ring 2", col: 1, row: 4 },
 ];
 const COLGAP = 92; // how far the side columns sit from centre — wide enough to reveal the figure
 const ROWGAP = 56;
