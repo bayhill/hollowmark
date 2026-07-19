@@ -1,4 +1,6 @@
 // Tiny WebAudio synth — placeholder sound effects until real audio assets exist.
+// A single shared instance (see `sfx` below) is used everywhere so the AudioContext
+// unlocked by the lobby's first click is the same one the game plays through.
 export class Sfx {
   private ctx: AudioContext | null = null;
   private noiseBuf: AudioBuffer | null = null;
@@ -288,6 +290,12 @@ export class Sfx {
   private pendingTheme = -1;
   private creep = 0; // 0..1: how far you've fallen — scales the horror
   ambientEnabled = true;
+
+  // the lobby's impending-doom drums live outside the depth-based ambient system
+  private lobbyNodes: AudioNode[] = [];
+  private lobbyTimers: Array<ReturnType<typeof setInterval>> = [];
+  private lobbyFader: GainNode | null = null;
+  private lobbyOn = false;
 
   // creep is a 0..1 depth factor; deeper = more frequent, more disturbing ambience.
   // A meaningful change in depth restarts the bed so the escalation is heard.
@@ -597,6 +605,174 @@ export class Sfx {
     }
   }
 
+  // ============================================================
+  // --- the lobby theme: impending-doom war drums (Diablo in spirit) ---
+  // ============================================================
+
+  // a deep war drum — a pitched membrane boom with a beater transient. The fast
+  // downward pitch drop is what makes it read as a struck drum and not a bass note.
+  private warDrum(out: AudioNode, when: number, freq = 55, gain = 0.5, dur = 0.6) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + when;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq * 2.4, t);
+    o.frequency.exponentialRampToValueAtTime(freq, t + 0.07);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(gain, t + 0.006); // hard attack — the strike
+    og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(og).connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+    // the beater: a short low-passed noise crack riding on top of the skin
+    const src = ctx.createBufferSource();
+    src.buffer = this.getNoiseBuf();
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 260;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(gain * 0.55, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    src.connect(f).connect(ng).connect(out);
+    src.start(t);
+    src.stop(t + 0.1);
+  }
+
+  // A slow martial march toward the dark, over a low D-minor dread-drone, with an
+  // ominous horn swell and a distant war-gong. Started from the lobby's first click;
+  // call stopLobbyTheme() when the descent begins and the dungeon's own bed takes over.
+  startLobbyTheme() {
+    if (!this.ctx || this.lobbyOn) return;
+    this.lobbyOn = true;
+    const ctx = this.ctx;
+    this.ensureReverb();
+
+    // fader (the clean exit-fade) ← master (breathes) ← drones + drum bus
+    const fader = ctx.createGain();
+    fader.gain.value = 1;
+    fader.connect(ctx.destination);
+    if (this.reverbSend) {
+      const send = ctx.createGain();
+      send.gain.value = 0.32; // the hall around the drums
+      fader.connect(send).connect(this.reverbSend);
+      this.lobbyNodes.push(send);
+    }
+    this.lobbyFader = fader;
+    this.lobbyNodes.push(fader);
+
+    const master = ctx.createGain();
+    master.gain.value = 0.4;
+    master.connect(fader);
+    this.lobbyNodes.push(master);
+
+    const drums = ctx.createGain();
+    drums.gain.value = 1;
+    drums.connect(master);
+    this.lobbyNodes.push(drums);
+
+    // --- the dread below: a low D bed and a bare, cold fifth ---
+    const drone = (freq: number, type: OscillatorType, gain: number) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.value = gain;
+      o.connect(g).connect(master);
+      o.start();
+      this.lobbyNodes.push(o, g);
+    };
+    drone(36.71, "sine", 0.30); // D1 — the pit
+    drone(55.0, "sine", 0.10); // A1 — a hollow fifth
+    drone(73.42, "triangle", 0.06); // D2 — a little body
+
+    // slow breathing on the whole bed
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.07;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.06;
+    lfo.connect(lfoGain).connect(master.gain);
+    lfo.start();
+    this.lobbyNodes.push(lfo, lfoGain);
+
+    // --- the drums: a heavy pulse, doom on the downbeats, a fill hauling you onward ---
+    const beat = 0.5; // slow and weighty
+    const phrase = 8; // two 4/4 bars
+    const playPhrase = () => {
+      if (!this.ctx || !this.lobbyOn) return;
+      for (let b = 0; b < phrase; b++) {
+        const t = b * beat;
+        const down = b === 0 || b === 4;
+        this.warDrum(drums, t, down ? 46 : 55, down ? 0.6 : 0.24, down ? 0.8 : 0.4);
+        if (b === 2 || b === 6) this.warDrum(drums, t + beat * 0.5, 55, 0.2, 0.3); // walking ghost note
+      }
+      // the pickup: two rising toms dragging you to the next downbeat
+      this.warDrum(drums, (phrase - 1) * beat + beat * 0.5, 62, 0.34, 0.3);
+      this.warDrum(drums, (phrase - 1) * beat + beat * 0.75, 72, 0.44, 0.3);
+    };
+    playPhrase();
+    this.lobbyTimers.push(setInterval(playPhrase, phrase * beat * 1000));
+
+    // --- an ominous horn swell rising out of the dark, now and then ---
+    this.lobbyTimers.push(
+      setInterval(() => {
+        if (!this.ctx || !this.lobbyOn) return;
+        const now = this.ctx.currentTime;
+        for (const fr of [73.42, 110.0]) {
+          // D2 + A2 — a bare, cold fifth
+          const o = this.ctx.createOscillator();
+          o.type = "sawtooth";
+          o.frequency.value = fr;
+          const f = this.ctx.createBiquadFilter();
+          f.type = "lowpass";
+          f.frequency.setValueAtTime(180, now);
+          f.frequency.linearRampToValueAtTime(720, now + 2.4);
+          f.frequency.linearRampToValueAtTime(180, now + 4.8);
+          const g = this.ctx.createGain();
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(0.05, now + 2.2);
+          g.gain.linearRampToValueAtTime(0.0001, now + 4.8);
+          o.connect(f).connect(g).connect(master); // through the bed so it fades on exit
+          o.start(now);
+          o.stop(now + 5);
+        }
+      }, 11000)
+    );
+
+    // --- a distant war-gong, tolling rarely over the march ---
+    this.lobbyTimers.push(
+      setInterval(() => {
+        if (this.ctx && this.lobbyOn && Math.random() < 0.6) this.pluck(55, 3.6, 0.06, 0.997, 0.9);
+      }, 8000)
+    );
+  }
+
+  stopLobbyTheme() {
+    if (!this.lobbyOn) return;
+    this.lobbyOn = false;
+    this.lobbyTimers.forEach((t) => clearInterval(t));
+    this.lobbyTimers = [];
+    // fade the fader out, then tear the nodes down — no click when town takes over
+    if (this.ctx && this.lobbyFader) {
+      const now = this.ctx.currentTime;
+      try {
+        this.lobbyFader.gain.cancelScheduledValues(now);
+        this.lobbyFader.gain.setValueAtTime(this.lobbyFader.gain.value, now);
+        this.lobbyFader.gain.linearRampToValueAtTime(0.0001, now + 0.6);
+      } catch { /* param busy — the teardown below still silences it */ }
+    }
+    this.lobbyFader = null;
+    const nodes = this.lobbyNodes;
+    this.lobbyNodes = [];
+    setTimeout(() => {
+      nodes.forEach((n) => {
+        try { (n as unknown as { stop?: () => void }).stop?.(); } catch { /* already stopped */ }
+        try { n.disconnect(); } catch { /* already gone */ }
+      });
+    }, 700);
+  }
+
   private getNoiseBuf(): AudioBuffer {
     if (!this.noiseBuf) {
       this.noiseBuf = this.ctx!.createBuffer(1, this.ctx!.sampleRate, this.ctx!.sampleRate);
@@ -728,3 +904,7 @@ export class Sfx {
     }
   }
 }
+
+// The one synth the whole app shares — the lobby unlocks it on the first click,
+// so the game already has a live AudioContext by the time town loads.
+export const sfx = new Sfx();

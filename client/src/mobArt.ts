@@ -24,18 +24,26 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       baseColor = 0xb84a30;
       const legL = scene.add.rectangle(-2, -3, 2.5, 6, 0x7a2c1a);
       const legR = scene.add.rectangle(2, -3, 2.5, 6, 0x7a2c1a);
+      const tail = scene.add.rectangle(-6, -6, 7, 1.4, 0x7a2c1a).setRotation(-0.6);
+      const tailTip = scene.add.triangle(-9.5, -3.5, 0, 3, -3, -2, 3, -1, 0x5f2010); // a barbed tip
       body = scene.add.ellipse(0, -9, 10, 9, baseColor);
       body.setStrokeStyle(1, 0x5f2010, 0.9);
+      const belly = scene.add.ellipse(-1.6, -10, 5, 4.5, 0xd06848).setAlpha(0.4); // lit from above
+      const bShade = scene.add.ellipse(1.5, -7, 6, 4, 0x5f2010).setAlpha(0.3);
       const head = scene.add.circle(0, -16, 3.8, 0xc85838);
       head.setStrokeStyle(1, 0x5f2010, 0.8);
+      const hornL = scene.add.triangle(-2.2, -18.8, 0, 3, -1.4, -3, 1, 0, 0x3a1810); // little horns
+      const hornR = scene.add.triangle(2.2, -18.8, 0, 3, 1.4, -3, -1, 0, 0x3a1810);
       const earL = scene.add.triangle(-4, -19, 0, 4, -3, -3, 2, 1, 0xb84a30);
       const earR = scene.add.triangle(4, -19, 0, 4, 3, -3, -2, 1, 0xb84a30);
-      const eyeL = scene.add.circle(-1.4, -16.5, 0.9, 0xffe040);
-      const eyeR = scene.add.circle(1.4, -16.5, 0.9, 0xffe040);
+      const brow = scene.add.rectangle(0, -17, 5, 0.9, 0x5f2010).setAlpha(0.6); // a mean little scowl
+      const eyeL = scene.add.circle(-1.4, -16.3, 0.9, 0xffe040);
+      const eyeR = scene.add.circle(1.4, -16.3, 0.9, 0xffe040);
       const blade = scene.add.rectangle(6, -10, 2, 9, 0x8a8274).setRotation(0.6); // a scavenged shiv
-      fig.add([legL, legR, blade, body, head, earL, earR, eyeL, eyeR]);
+      fig.add([legL, legR, tail, tailTip, blade, body, belly, bShade, head, earL, earR, hornL, hornR, brow, eyeL, eyeR]);
       // constant nervous hopping — it KNOWS it should run
-      anims.push(scene.tweens.add({ targets: [body, head, earL, earR, eyeL, eyeR], y: "-=1.6", duration: 240 + jitter / 3, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [body, belly, bShade, head, earL, earR, hornL, hornR, brow, eyeL, eyeR], y: "-=1.6", duration: 240 + jitter / 3, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [tail, tailTip], rotation: "+=0.25", duration: 380 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: blade, rotation: "+=0.3", duration: 480 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -69,11 +77,20 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const armB = scene.add.rectangle(6, -10, 9, 3, 0x4a6234).setRotation(0.5);
       body = scene.add.ellipse(0, -12, 14, 13, baseColor).setRotation(0.18);
       body.setStrokeStyle(1, 0x2f3d22, 0.9);
+      // rotted volume: a top highlight, a low belly shadow, exposed ribs and a weeping wound
+      const zHi = scene.add.ellipse(-3, -15, 7, 6, 0x9ab86a).setAlpha(0.3);
+      const zShade = scene.add.ellipse(1, -9, 12, 8, 0x2f3d22).setAlpha(0.32);
+      const rib1 = scene.add.rectangle(-1, -13, 8, 1, 0x9ab86a).setRotation(0.18).setAlpha(0.5);
+      const rib2 = scene.add.rectangle(-1, -10, 7, 1, 0x9ab86a).setRotation(0.18).setAlpha(0.5);
+      const wound = scene.add.ellipse(3, -12, 3, 4, 0x5a1a1a).setAlpha(0.8);
       const head = scene.add.circle(5, -19, 4.5, 0x7fa05e);
       head.setStrokeStyle(1, 0x2f3d22, 0.7);
+      const jaw = scene.add.rectangle(5.2, -16.4, 4, 2, 0x6a8a4e).setStrokeStyle(1, 0x2f3d22, 0.5); // a slack, hanging jaw
       const eye = scene.add.circle(6.5, -20, 1.1, 0xd03030);
+      const eye2 = scene.add.circle(3.6, -19.6, 0.9, 0x902020);
       const armF = scene.add.rectangle(10, -14, 10, 3, 0x55703c).setRotation(0.22);
-      fig.add([legs, armB, body, head, eye, armF]);
+      fig.add([legs, armB, body, zHi, zShade, rib1, rib2, wound, head, jaw, eye, eye2, armF]);
+      anims.push(scene.tweens.add({ targets: jaw, y: "+=1", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" })); // the jaw works, chewing nothing
       // the dead reach, endlessly
       anims.push(scene.tweens.add({ targets: [armF, armB], rotation: "+=0.28", duration: 950 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
@@ -84,15 +101,23 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       baseColor = 0xd8d4c0;
       const legL = scene.add.rectangle(-2, -4, 2.5, 8, 0xb8b4a0);
       const legR = scene.add.rectangle(2, -4, 2.5, 8, 0xb8b4a0);
+      const pelvis = scene.add.ellipse(0, -6, 6.5, 3.5, 0xc8c4b0).setStrokeStyle(1, 0x6a675a, 0.6);
+      const spine = scene.add.rectangle(0, -13, 1.4, 12, 0xc8c4b0);
       body = scene.add.rectangle(0, -13, 9, 11, baseColor);
       body.setStrokeStyle(1, 0x6a675a, 0.8);
-      const rib1 = scene.add.rectangle(0, -15, 8, 1, 0x9a968a);
-      const rib2 = scene.add.rectangle(0, -12, 8, 1, 0x9a968a);
+      const cavity = scene.add.ellipse(0, -12, 5, 8, 0x47433a).setAlpha(0.4); // the dark of the ribcage
+      const rib1 = scene.add.rectangle(0, -16, 8, 1, 0x9a968a);
+      const rib2 = scene.add.rectangle(0, -13.5, 8, 1, 0x9a968a);
+      const rib3 = scene.add.rectangle(0, -11, 7.5, 1, 0x9a968a);
+      const rib4 = scene.add.rectangle(0, -8.5, 6.5, 1, 0x9a968a);
       const skull = scene.add.circle(0, -22, 4, 0xe8e4d4);
       skull.setStrokeStyle(1, 0x6a675a, 0.7);
-      const eyeL = scene.add.circle(-1.6, -22.5, 0.9, 0x22242a);
-      const eyeR = scene.add.circle(1.6, -22.5, 0.9, 0x22242a);
-      fig.add([legL, legR, body, rib1, rib2, skull, eyeL, eyeR]);
+      const skullHi = scene.add.ellipse(-1.3, -23.4, 3, 2, 0xf4f0e2).setAlpha(0.5);
+      const jaw = scene.add.rectangle(0, -19.4, 4.4, 1.8, 0xdedac6).setStrokeStyle(1, 0x6a675a, 0.5);
+      const nasal = scene.add.triangle(0, -21.5, 0, 1.6, -1, -1.4, 1, -1.4, 0x6a675a);
+      const eyeL = scene.add.circle(-1.6, -22.5, 1, 0x141414);
+      const eyeR = scene.add.circle(1.6, -22.5, 1, 0x141414);
+      fig.add([legL, legR, pelvis, spine, body, cavity, rib1, rib2, rib3, rib4, skull, skullHi, jaw, nasal, eyeL, eyeR]);
       if (kind === "archer") {
         const bow = scene.add.arc(8, -14, 8, -80, 80, false, 0x000000, 0);
         bow.setStrokeStyle(2, 0x7a5a34, 0.95);
@@ -152,11 +177,16 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const head = scene.add.circle(0, -26, 5.5, 0x8f3aaf);
       const hornL = scene.add.triangle(-5, -31, 0, 6, -3, -6, 3, 2, 0xd8d4c0);
       const hornR = scene.add.triangle(5, -31, 0, 6, 3, -6, -3, 2, 0xd8d4c0);
+      const brow = scene.add.rectangle(0, -27.8, 8, 1.4, 0x2a0f38).setAlpha(0.7);
       const eyeL = scene.add.circle(-2, -26.5, 1.2, 0xff5030);
       const eyeR = scene.add.circle(2, -26.5, 1.2, 0xff5030);
+      const maw = scene.add.rectangle(0, -23.4, 6, 2, 0x2a0a1a);
+      const fangL = scene.add.triangle(-1.6, -22.6, 0, 2, -0.8, -1.6, 0.8, -1.6, 0xe8dcd0);
+      const fangR = scene.add.triangle(1.6, -22.6, 0, 2, -0.8, -1.6, 0.8, -1.6, 0xe8dcd0);
+      const sternum = scene.add.rectangle(0, -14, 1.3, 12, 0x2a0f38).setAlpha(0.4); // a ridged, cabled chest
       const clawL = scene.add.rectangle(-11, -13, 6, 3.5, 0x5a1f78).setRotation(-0.4);
       const clawR = scene.add.rectangle(11, -13, 6, 3.5, 0x5a1f78).setRotation(0.4);
-      fig.add([legs, clawL, clawR, body, head, hornL, hornR, eyeL, eyeR]);
+      fig.add([legs, clawL, clawR, body, sternum, head, hornL, hornR, brow, eyeL, eyeR, maw, fangL, fangR]);
       // claws flex, eager
       anims.push(scene.tweens.add({ targets: [clawL, clawR], rotation: "+=0.18", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
@@ -192,12 +222,15 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const snout = scene.add.ellipse(0, -19, 4, 2.6, 0x9a7a56);
       const hornL = scene.add.triangle(-5, -26, 0, 5, -4, -5, 2, 1, 0xd8ccae);
       const hornR = scene.add.triangle(5, -26, 0, 5, 4, -5, -2, 1, 0xd8ccae);
+      const brow = scene.add.rectangle(0, -23.4, 5, 0.9, 0x3d2a1a).setAlpha(0.6); // a heavy scowl
       const eyeL = scene.add.circle(-2, -22, 0.9, 0xffd040);
       const eyeR = scene.add.circle(2, -22, 0.9, 0xffd040);
+      const noseHi = scene.add.circle(0.6, -19.4, 0.8, 0xb89a72).setAlpha(0.5);
+      const beard = scene.add.triangle(0, -16.5, 0, 6.5, -2.6, -1, 2.6, -1, 0x4f3622); // a scraggly goat beard
       const axe = scene.add.rectangle(8, -13, 2.5, 13, 0x5a4428).setRotation(0.4);
       const axeHead = scene.add.triangle(11, -19, 0, 6, -5, -2, 4, -3, 0x9a9284);
-      fig.add([legL, legR, axe, axeHead, body, mane, head, snout, hornL, hornR, eyeL, eyeR]);
-      anims.push(scene.tweens.add({ targets: [head, snout, hornL, hornR, eyeL, eyeR], y: "-=1.4", duration: 420 + jitter / 2, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      fig.add([legL, legR, axe, axeHead, body, mane, beard, head, snout, noseHi, brow, hornL, hornR, eyeL, eyeR]);
+      anims.push(scene.tweens.add({ targets: [head, snout, noseHi, brow, beard, hornL, hornR, eyeL, eyeR], y: "-=1.4", duration: 420 + jitter / 2, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: [axe, axeHead], rotation: "+=0.2", duration: 640 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -208,14 +241,17 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body = scene.add.triangle(0, -10, -8, 10, 8, 10, 0, -16, baseColor);
       body.setStrokeStyle(1, 0x4a6888, 0.6);
       (body as Phaser.GameObjects.Triangle).setAlpha(0.75);
+      const wisp = scene.add.ellipse(0, 6, 11, 5, 0x7a98b8).setAlpha(0.22); // dissolving into mist below
       const head = scene.add.circle(0, -20, 4, 0xaac4de).setAlpha(0.85);
-      const eyeL = scene.add.circle(-1.6, -20.5, 1, 0x40e8ff);
-      const eyeR = scene.add.circle(1.6, -20.5, 1, 0x40e8ff);
+      const hollow = scene.add.circle(0, -19.6, 2.6, 0x0a1420).setAlpha(0.55); // the void where a face should be
+      const eyeL = scene.add.circle(-1.6, -20.2, 1, 0x40e8ff);
+      const eyeR = scene.add.circle(1.6, -20.2, 1, 0x40e8ff);
       const tatter1 = scene.add.triangle(-5, -3, 0, 6, -3, -3, 3, -1, 0x7a98b8).setAlpha(0.6);
       const tatter2 = scene.add.triangle(4, -2, 0, 7, -3, -2, 3, -3, 0x7a98b8).setAlpha(0.6);
-      fig.add([tatter1, tatter2, body, head, eyeL, eyeR]);
+      const tatter3 = scene.add.triangle(0, 1, 0, 8, -2.5, -2, 2.5, -2, 0x6a88a8).setAlpha(0.5);
+      fig.add([wisp, tatter1, tatter2, tatter3, body, head, hollow, eyeL, eyeR]);
       // it hovers — everything about it hovers
-      anims.push(scene.tweens.add({ targets: [body, head, eyeL, eyeR, tatter1, tatter2], y: "-=3.5", duration: 900 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [body, head, hollow, eyeL, eyeR, tatter1, tatter2, tatter3, wisp], y: "-=3.5", duration: 900 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: [tatter1, tatter2], rotation: "+=0.3", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -232,9 +268,15 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       head.setStrokeStyle(1, 0x3a3a44, 0.8);
       const hornL = scene.add.triangle(-4, -25, 0, 4, -3, -4, 2, 1, 0x8a8a94);
       const hornR = scene.add.triangle(4, -25, 0, 4, 3, -4, -2, 1, 0x8a8a94);
+      const brow = scene.add.rectangle(0, -22.6, 7, 1, 0x3a3a44).setAlpha(0.6);
       const eyeL = scene.add.circle(-2, -21, 1, 0xff8030);
       const eyeR = scene.add.circle(2, -21, 1, 0xff8030);
-      fig.add([legs, wingL, wingR, body, head, hornL, hornR, eyeL, eyeR]);
+      const mouth = scene.add.rectangle(0, -19.2, 4.4, 1.4, 0x2a2a30); // a snarling stone maw
+      const fangGL = scene.add.triangle(-1.3, -18.4, 0, 1.6, -0.7, -1.2, 0.7, -1.2, 0x9a9aa4);
+      const fangGR = scene.add.triangle(1.3, -18.4, 0, 1.6, -0.7, -1.2, 0.7, -1.2, 0x9a9aa4);
+      const clawGL = scene.add.triangle(-8, -8, 0, -2.5, 2.5, 0, 0, 2, 0x55555f); // talons
+      const clawGR = scene.add.triangle(8, -8, 0, -2.5, -2.5, 0, 0, 2, 0x55555f);
+      fig.add([legs, wingL, wingR, clawGL, clawGR, body, head, hornL, hornR, brow, eyeL, eyeR, mouth, fangGL, fangGR]);
       // slow wing flex — stone remembering how to fly
       anims.push(scene.tweens.add({ targets: wingL, rotation: "-=0.22", duration: 1200 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: wingR, rotation: "+=0.22", duration: 1200 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
@@ -253,10 +295,15 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const head = scene.add.circle(0, -20, 4, 0xe8b8a8);
       head.setStrokeStyle(1, 0x6a2438, 0.7);
       const hair = scene.add.ellipse(0, -23, 8, 4, 0x2c1420);
+      const hornL = scene.add.triangle(-2.6, -23.2, 0, 3, -1.2, -3, 0.8, 0, 0x3a1420);
+      const hornR = scene.add.triangle(2.6, -23.2, 0, 3, 1.2, -3, -0.8, 0, 0x3a1420);
+      const lockL = scene.add.rectangle(-3.8, -18.5, 1.6, 4.5, 0x2c1420); // hair falling past the cheeks
+      const lockR = scene.add.rectangle(3.8, -18.5, 1.6, 4.5, 0x2c1420);
       const eyeL = scene.add.circle(-1.5, -20.4, 0.8, 0xff3860);
       const eyeR = scene.add.circle(1.5, -20.4, 0.8, 0xff3860);
+      const lips = scene.add.rectangle(0, -18.2, 2, 0.9, 0xd85a70);
       const star = scene.add.circle(7, -14, 1.6, 0xff5878);
-      fig.add([legL, legR, wingL, wingR, body, head, hair, eyeL, eyeR, star]);
+      fig.add([legL, legR, wingL, wingR, body, lockL, lockR, head, hair, hornL, hornR, eyeL, eyeR, lips, star]);
       anims.push(scene.tweens.add({ targets: [wingL, wingR], scaleY: 1.2, duration: 640 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: star, y: "-=3", alpha: 0.4, duration: 500 + jitter / 2, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
@@ -275,10 +322,14 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       head.setStrokeStyle(1, 0x4a1408, 0.8);
       const hornL = scene.add.triangle(-6, -30, 0, 6, -5, -6, 3, 1, 0x2c1810);
       const hornR = scene.add.triangle(6, -30, 0, 6, 5, -6, -3, 1, 0x2c1810);
+      const hBrow = scene.add.rectangle(0, -27.4, 8, 1.2, 0x2c1810).setAlpha(0.7);
       const eyeL = scene.add.circle(-2.5, -26, 1.2, 0xffd040);
       const eyeR = scene.add.circle(2.5, -26, 1.2, 0xffd040);
+      const grin = scene.add.rectangle(0, -22.6, 6, 1.6, 0x2a0804); // a mouthful of forge-light
+      const hTeeth: Phaser.GameObjects.Shape[] = [];
+      for (let i = -2; i <= 2; i++) hTeeth.push(scene.add.rectangle(i * 1.4, -22.6, 0.8, 1.4, 0xffb040));
       const whip = scene.add.rectangle(11, -12, 2, 16, 0xff5810).setRotation(0.5).setAlpha(0.9);
-      fig.add([legs, wingL, wingR, whip, body, chest, head, hornL, hornR, eyeL, eyeR]);
+      fig.add([legs, wingL, wingR, whip, body, chest, head, hornL, hornR, hBrow, eyeL, eyeR, grin, ...hTeeth]);
       anims.push(scene.tweens.add({ targets: chest, alpha: 0.85, duration: 480 + jitter / 2, yoyo: true, repeat: -1 })); // it breathes fire IN
       anims.push(scene.tweens.add({ targets: whip, rotation: "+=0.35", duration: 560 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
@@ -307,12 +358,17 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body = scene.add.ellipse(0, -19, 26, 22, baseColor);
       body.setStrokeStyle(2, 0x3d0f0c, 0.9);
       const apron = scene.add.rectangle(0, -16, 12, 16, 0x6a4a3a);
+      const gore1 = scene.add.ellipse(-1, -14, 7, 5, 0x6a1414).setAlpha(0.55); // the apron never comes clean
+      const gore2 = scene.add.ellipse(3, -19, 3, 4, 0x8a1a1a).setAlpha(0.5);
       const head = scene.add.circle(0, -33, 6, 0xb04038);
+      const brow = scene.add.rectangle(0, -35, 8, 1.3, 0x3d0f0c).setAlpha(0.65);
       const eyeL = scene.add.circle(-2.2, -33.5, 1.2, 0xffe060);
       const eyeR = scene.add.circle(2.2, -33.5, 1.2, 0xffe060);
+      const grin = scene.add.rectangle(0, -30.4, 5.5, 1.4, 0x2a0808);
       const cleaverBlade = scene.add.rectangle(15, -22, 9, 13, 0xc8ccd4).setRotation(0.25);
+      const cleaverEdge = scene.add.rectangle(17, -22, 1.6, 13, 0x8a1818).setRotation(0.25).setAlpha(0.7); // a wet edge
       const cleaverHandle = scene.add.rectangle(13, -12, 3, 9, 0x54402a).setRotation(0.25);
-      fig.add([legs, body, apron, head, eyeL, eyeR, cleaverHandle, cleaverBlade]);
+      fig.add([legs, body, apron, gore1, gore2, head, brow, eyeL, eyeR, grin, cleaverHandle, cleaverBlade, cleaverEdge]);
       // the cleaver twitches — he's deciding which cut you are
       anims.push(scene.tweens.add({ targets: [cleaverBlade, cleaverHandle], rotation: "+=0.14", duration: 500 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
@@ -323,12 +379,15 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const legs = scene.add.rectangle(0, -4, 8, 7, 0x2f1220);
       body = scene.add.ellipse(0, -14, 12, 15, baseColor);
       body.setStrokeStyle(1, 0x2f1220, 0.9);
+      const quiver = scene.add.rectangle(-6, -16, 2.6, 8, 0x3d1826).setRotation(-0.35);
       const hood = scene.add.triangle(0, -25, 0, -7, 6, 5, -6, 5, 0x3d1826);
       const eyeL = scene.add.circle(-1.8, -23, 1, 0xff4040);
       const eyeR = scene.add.circle(1.8, -23, 1, 0xff4040);
+      const maw = scene.add.rectangle(0, -21.4, 3, 0.9, 0x1a0a12); // a grin in the hood's dark
       const bow = scene.add.arc(9, -15, 10, -80, 80, false, 0x000000, 0);
       bow.setStrokeStyle(2, 0x54402a, 0.95);
-      fig.add([legs, body, hood, eyeL, eyeR, bow]);
+      const arrow = scene.add.rectangle(9, -15, 1, 12, 0x9a8a6a); // nocked, drawn
+      fig.add([legs, quiver, body, hood, eyeL, eyeR, maw, bow, arrow]);
       anims.push(scene.tweens.add({ targets: bow, y: "-=2", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: [eyeL, eyeR], alpha: 0.4, duration: 500, yoyo: true, repeat: -1, delay: jitter }));
       break;
@@ -341,16 +400,22 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body = segM;
       body.setStrokeStyle(1, 0x6a643a, 0.8);
       const segF = scene.add.ellipse(10, -11, 16, 13, 0xc8c07a);
+      const ridge = scene.add.ellipse(0, -14, 20, 1.6, 0x8a8040).setAlpha(0.4); // a wet segment seam
       const head = scene.add.circle(17, -14, 5, 0xd8d08a);
+      const mandU = scene.add.triangle(21, -15.5, 0, 3, -3.5, -2, 3, -1, 0xc8c07a); // grasping mandibles
+      const mandD = scene.add.triangle(21, -12.5, 0, -3, -3.5, 2, 3, 1, 0xc8c07a);
       const eyeL = scene.add.circle(16, -16, 1.1, 0x501818);
       const eyeR = scene.add.circle(19, -15, 1.1, 0x501818);
       const eggA = scene.add.circle(-14, -4, 3, 0xdcd6a8, 0.85);
       const eggB = scene.add.circle(-6, -2, 2.4, 0xdcd6a8, 0.85);
-      fig.add([eggA, eggB, segB, segM, segF, head, eyeL, eyeR]);
+      const eggC = scene.add.circle(-11, -8, 2.4, 0xdcd6a8, 0.8);
+      const ooze = scene.add.ellipse(-4, -2.5, 6, 2, 0x8a8040, 0.5); // a pooling secretion
+      fig.add([ooze, eggA, eggB, eggC, segB, segM, segF, ridge, head, mandU, mandD, eyeL, eyeR]);
       // segments writhe out of phase — deeply unpleasant, exactly right
       anims.push(scene.tweens.add({ targets: segF, scaleX: 1.08, scaleY: 0.94, duration: 520 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: segB, scaleX: 1.08, scaleY: 0.94, duration: 520 + jitter, yoyo: true, repeat: -1, ease: "sine.inout", delay: 260 }));
-      anims.push(scene.tweens.add({ targets: [eggA, eggB], scaleX: 1.15, scaleY: 1.15, duration: 900 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [eggA, eggB, eggC], scaleX: 1.15, scaleY: 1.15, duration: 900 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [mandU, mandD], rotation: "+=0.2", duration: 400 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
 
@@ -358,18 +423,26 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       baseColor = 0xd83a2a;
       const legs = scene.add.rectangle(0, -5, 16, 10, 0x5a1210);
       const tail = scene.add.rectangle(-12, -8, 12, 4, 0x8f2018).setRotation(-0.5);
+      const tailBarb = scene.add.triangle(-18, -6, 0, 3, -3, -2, 3, -1, 0x5a1210).setRotation(-0.5);
+      const spikeL2 = scene.add.triangle(-13, -27, 0, 7, -5, -9, 5, 2, 0xa83028);
+      const spikeR2 = scene.add.triangle(13, -27, 0, 7, 5, -9, -5, 2, 0xa83028);
       body = scene.add.ellipse(0, -20, 26, 24, baseColor);
       body.setStrokeStyle(2, 0x5a1210, 0.9);
+      const brand = scene.add.triangle(0, -19, 0, -6, -3.5, 4, 3.5, 4, 0x8f2018).setAlpha(0.55); // a hate-rune seared in
       const spikeL = scene.add.triangle(-8, -32, 0, 6, -3, -8, 4, 2, 0x8f2018);
       const spikeR = scene.add.triangle(8, -32, 0, 6, 3, -8, -4, 2, 0x8f2018);
       const head = scene.add.circle(0, -34, 6.5, 0xe85030);
       const hornL = scene.add.triangle(-6, -40, 0, 7, -5, -8, 4, 3, 0xd8d4c0);
       const hornR = scene.add.triangle(6, -40, 0, 7, 5, -8, -4, 3, 0xd8d4c0);
+      const brow = scene.add.rectangle(0, -36.4, 9, 1.4, 0x5a1210).setAlpha(0.7);
       const eyeL = scene.add.circle(-2.4, -34.5, 1.4, 0xffe060);
       const eyeR = scene.add.circle(2.4, -34.5, 1.4, 0xffe060);
-      fig.add([tail, legs, body, spikeL, spikeR, head, hornL, hornR, eyeL, eyeR]);
+      const maw = scene.add.rectangle(0, -31, 7, 2, 0x2a0808);
+      const fangL = scene.add.triangle(-1.6, -30.2, 0, 2, -0.8, -1.6, 0.8, -1.6, 0xe8dcd0);
+      const fangR = scene.add.triangle(1.6, -30.2, 0, 2, -0.8, -1.6, 0.8, -1.6, 0xe8dcd0);
+      fig.add([tail, tailBarb, spikeL2, spikeR2, legs, body, brand, spikeL, spikeR, head, hornL, hornR, brow, eyeL, eyeR, maw, fangL, fangR]);
       // the tail lashes; the eyes never blink
-      anims.push(scene.tweens.add({ targets: tail, rotation: "-=0.35", duration: 800 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [tail, tailBarb], rotation: "-=0.35", duration: 800 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: [eyeL, eyeR], alpha: 0.5, duration: 400, yoyo: true, repeat: -1, delay: jitter }));
       break;
     }
@@ -378,17 +451,28 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       // the The Thorned Maiden: pale, spidered, crowned in spines
       baseColor = 0xb87a9a;
       const legs = scene.add.rectangle(0, -4, 10, 8, 0x4a2438);
+      // splayed spider-legs, two pair
+      const spiderLA = scene.add.rectangle(-9, -11, 10, 1.4, 0x5a2a44).setRotation(-0.95);
+      const spiderRA = scene.add.rectangle(9, -11, 10, 1.4, 0x5a2a44).setRotation(0.95);
+      const spiderLB = scene.add.rectangle(-9, -7, 10, 1.4, 0x5a2a44).setRotation(-1.35);
+      const spiderRB = scene.add.rectangle(9, -7, 10, 1.4, 0x5a2a44).setRotation(1.35);
       body = scene.add.ellipse(0, -16, 15, 18, baseColor);
       body.setStrokeStyle(1, 0x5a2a44, 0.9);
       const head = scene.add.circle(0, -28, 5, 0xd8a8c0);
       const spineL = scene.add.triangle(-6, -30, 0, 6, -4, -6, 3, 2, 0x4a2438);
       const spineR = scene.add.triangle(6, -30, 0, 6, 4, -6, -3, 2, 0x4a2438);
+      // a crown of thorns rising from the brow
+      const crownC = scene.add.triangle(0, -34, 0, 7, -2.4, -8, 2.4, -8, 0x4a2438);
+      const crownL = scene.add.triangle(-3.5, -32.5, 0, 6, -2.6, -7, 1.6, 1, 0x5a2a44);
+      const crownR = scene.add.triangle(3.5, -32.5, 0, 6, 2.6, -7, -1.6, 1, 0x5a2a44);
       const eyeL = scene.add.circle(-2, -28.5, 1.1, 0x5fae3f);
       const eyeR = scene.add.circle(2, -28.5, 1.1, 0x5fae3f);
+      const mouth = scene.add.rectangle(0, -25.6, 2.4, 0.9, 0x6a2438);
       const clawL = scene.add.rectangle(-10, -18, 8, 3, 0x8a5a74).setRotation(-0.5);
       const clawR = scene.add.rectangle(10, -18, 8, 3, 0x8a5a74).setRotation(0.5);
-      fig.add([legs, clawL, clawR, body, head, spineL, spineR, eyeL, eyeR]);
+      fig.add([legs, spiderLA, spiderRA, spiderLB, spiderRB, clawL, clawR, body, head, crownL, crownC, crownR, spineL, spineR, eyeL, eyeR, mouth]);
       anims.push(scene.tweens.add({ targets: [clawL, clawR], rotation: "+=0.2", duration: 600 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [spiderLA, spiderRA, spiderLB, spiderRB], rotation: "+=0.12", duration: 480 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
 
@@ -396,16 +480,24 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       // the The White Maw: a wall of chitin and mandibles
       baseColor = 0xc8b88a;
       const legs = scene.add.rectangle(0, -5, 18, 10, 0x6a5a3a);
+      const spikeL = scene.add.triangle(-14, -22, 0, 6, -4, -7, 4, 2, 0xd8cca0);
+      const spikeR = scene.add.triangle(14, -22, 0, 6, 4, -7, -4, 2, 0xd8cca0);
       body = scene.add.ellipse(0, -20, 28, 24, baseColor);
       body.setStrokeStyle(2, 0x6a5a3a, 0.9);
       const plate = scene.add.ellipse(0, -24, 20, 12, 0xd8cca0);
+      const plateRidge = scene.add.rectangle(0, -23, 1.4, 10, 0x9a8a5a).setAlpha(0.5); // a chitin seam
       const head = scene.add.circle(0, -34, 6, 0xb8a878);
       const mandL = scene.add.triangle(-5, -36, 0, 6, -4, -5, 3, 2, 0xf0ead8);
       const mandR = scene.add.triangle(5, -36, 0, 6, 4, -5, -3, 2, 0xf0ead8);
+      const mandL2 = scene.add.triangle(-6, -32.5, 0, 5, -4, -3, 3, 1, 0xe0d8c0); // a lower pair
+      const mandR2 = scene.add.triangle(6, -32.5, 0, 5, 4, -3, -3, 1, 0xe0d8c0);
       const eyeL = scene.add.circle(-2.4, -34.5, 1.3, 0x8ad0ff);
       const eyeR = scene.add.circle(2.4, -34.5, 1.3, 0x8ad0ff);
-      fig.add([legs, body, plate, head, mandL, mandR, eyeL, eyeR]);
+      const eyeSmL = scene.add.circle(-4.4, -33, 0.7, 0x8ad0ff); // clustered ocelli
+      const eyeSmR = scene.add.circle(4.4, -33, 0.7, 0x8ad0ff);
+      fig.add([legs, spikeL, spikeR, body, plate, plateRidge, head, mandL, mandR, mandL2, mandR2, eyeL, eyeR, eyeSmL, eyeSmR]);
       anims.push(scene.tweens.add({ targets: [mandL, mandR], rotation: "+=0.25", duration: 350 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [mandL2, mandR2], rotation: "-=0.18", duration: 350 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
 
@@ -413,16 +505,24 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       // the Lord of Hatred: a floating spectre trailing rags
       baseColor = 0x4a8a9a;
       const trail = scene.add.triangle(0, -4, 0, 8, 8, -6, -8, -6, 0x2a4a54);
+      const tatterL = scene.add.triangle(-6, -5, 0, 8, -3, -3, 3, -1, 0x2a4a54).setAlpha(0.6);
+      const tatterR = scene.add.triangle(6, -4, 0, 9, -3, -2, 3, -3, 0x2a4a54).setAlpha(0.6);
       body = scene.add.ellipse(0, -16, 14, 18, baseColor);
       body.setStrokeStyle(1, 0x1d3a42, 0.9);
       const skull = scene.add.circle(0, -28, 5.5, 0x9ac8d4);
+      const voidL = scene.add.circle(-2, -28.4, 1.9, 0x0a1a1e).setAlpha(0.7); // sockets of nothing
+      const voidR = scene.add.circle(2, -28.4, 1.9, 0x0a1a1e).setAlpha(0.7);
       const hornL = scene.add.triangle(-5, -33, 0, 6, -4, -6, 3, 2, 0xd8d4c0);
       const hornR = scene.add.triangle(5, -33, 0, 6, 4, -6, -3, 2, 0xd8d4c0);
-      const eyeL = scene.add.circle(-2, -28.5, 1.2, 0xcdefff);
-      const eyeR = scene.add.circle(2, -28.5, 1.2, 0xcdefff);
-      fig.add([trail, body, skull, hornL, hornR, eyeL, eyeR]);
+      const crownC = scene.add.triangle(0, -35, 0, 6, -2.4, -7, 2.4, -7, 0xd8d4c0); // a broken diadem
+      const eyeL = scene.add.circle(-2, -28.4, 1, 0xcdefff);
+      const eyeR = scene.add.circle(2, -28.4, 1, 0xcdefff);
+      const jaw = scene.add.rectangle(0, -25.4, 3.6, 1.6, 0x7ab0bc);
+      fig.add([trail, tatterL, tatterR, body, skull, voidL, voidR, hornL, crownC, hornR, jaw, eyeL, eyeR]);
       // he floats — the whole spectre drifts
       anims.push(scene.tweens.add({ targets: fig, y: "-=3", duration: 900 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [tatterL, tatterR], rotation: "+=0.2", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [eyeL, eyeR], alpha: 0.4, duration: 600, yoyo: true, repeat: -1, delay: jitter }));
       break;
     }
 
@@ -431,14 +531,22 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       baseColor = 0x7a9ab8;
       const wingL = scene.add.triangle(-10, -22, 0, 10, -10, -8, 2, -2, 0xb8d0e8).setAlpha(0.7);
       const wingR = scene.add.triangle(10, -22, 0, 10, 10, -8, -2, -2, 0xb8d0e8).setAlpha(0.7);
+      const wingRibL = scene.add.rectangle(-8, -22, 12, 1, 0xe0f0ff).setRotation(-0.5).setAlpha(0.7); // frozen feathers
+      const wingRibR = scene.add.rectangle(8, -22, 12, 1, 0xe0f0ff).setRotation(0.5).setAlpha(0.7);
       const legs = scene.add.rectangle(0, -5, 14, 9, 0x3a4a5c);
       body = scene.add.ellipse(0, -19, 22, 20, baseColor);
       body.setStrokeStyle(2, 0x3a4a5c, 0.9);
+      const chest = scene.add.ellipse(0, -20, 12, 10, 0xa8c4dc).setAlpha(0.55); // a frost breastplate
+      const halo = scene.add.arc(0, -40, 5, -160, 110, false).setStrokeStyle(1.8, 0xcfe6f8, 0.85); // a cracked halo
       const head = scene.add.circle(0, -32, 5.5, 0x9ab8d0);
-      const eyeL = scene.add.circle(-2, -32.5, 1.2, 0xcdefff);
-      const eyeR = scene.add.circle(2, -32.5, 1.2, 0xcdefff);
-      fig.add([wingL, wingR, legs, body, head, eyeL, eyeR]);
-      anims.push(scene.tweens.add({ targets: [wingL, wingR], scaleY: 1.15, duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      const shardL = scene.add.triangle(-4.5, -37, 0, 4, -2, -3, 2, 0, 0xcfe6f8); // a broken crown of ice
+      const shardR = scene.add.triangle(4.5, -37, 0, 4, 2, -3, -2, 0, 0xcfe6f8);
+      const brow = scene.add.rectangle(0, -33.6, 8, 1.2, 0x3a4a5c).setAlpha(0.6);
+      const eyeL = scene.add.circle(-2, -32.2, 1.2, 0xcdefff);
+      const eyeR = scene.add.circle(2, -32.2, 1.2, 0xcdefff);
+      fig.add([wingL, wingRibL, wingR, wingRibR, legs, body, chest, halo, head, shardL, shardR, brow, eyeL, eyeR]);
+      anims.push(scene.tweens.add({ targets: [wingL, wingR, wingRibL, wingRibR], scaleY: 1.15, duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [eyeL, eyeR], alpha: 0.5, duration: 700, yoyo: true, repeat: -1, delay: jitter }));
       break;
     }
 
@@ -447,17 +555,29 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       baseColor = 0xa84a3a;
       const tendL = scene.add.rectangle(-12, -10, 10, 3.5, 0x6a2a20).setRotation(-0.6);
       const tendR = scene.add.rectangle(12, -10, 10, 3.5, 0x6a2a20).setRotation(0.6);
+      // a great outer rack of spikes rising off the shoulders
+      const spikeL2 = scene.add.triangle(-13, -28, 0, 8, -5, -10, 5, 2, 0xc0b498);
+      const spikeR2 = scene.add.triangle(13, -28, 0, 8, 5, -10, -5, 2, 0xc0b498);
       const legs = scene.add.rectangle(0, -5, 16, 10, 0x5a2018);
       body = scene.add.ellipse(0, -20, 26, 24, baseColor);
       body.setStrokeStyle(2, 0x5a2018, 0.9);
+      const chestScar = scene.add.triangle(0, -19, 0, -7, -3.5, 4, 3.5, 4, 0x6a2a20).setAlpha(0.55); // a rune branded into the chest
       const spikeL = scene.add.triangle(-8, -33, 0, 6, -3, -8, 4, 2, 0xd8ccb0);
       const spikeR = scene.add.triangle(8, -33, 0, 6, 3, -8, -4, 2, 0xd8ccb0);
       const head = scene.add.circle(0, -35, 6.5, 0xc86a4a);
+      // a crown of horns
+      const crownL = scene.add.triangle(-4.5, -42, 0, 5, -2, -7, 2, 1, 0xd8ccb0);
+      const crownM = scene.add.triangle(0, -44.5, 0, 6, -2.6, -7, 2.6, -7, 0xe8dcc0);
+      const crownR = scene.add.triangle(4.5, -42, 0, 5, 2, -7, -2, 1, 0xd8ccb0);
+      const brow = scene.add.rectangle(0, -37.4, 9, 1.6, 0x5a2018).setAlpha(0.7);
       const eyeL = scene.add.circle(-2.4, -35.5, 1.4, 0xffe060);
       const eyeR = scene.add.circle(2.4, -35.5, 1.4, 0xffe060);
-      const grin = scene.add.rectangle(0, -32, 7, 1.5, 0x2a1008);
-      fig.add([tendL, tendR, legs, body, spikeL, spikeR, head, eyeL, eyeR, grin]);
+      const grin = scene.add.rectangle(0, -31.6, 8, 2, 0x2a1008);
+      const teeth: Phaser.GameObjects.Shape[] = [];
+      for (let i = -2; i <= 2; i++) teeth.push(scene.add.rectangle(i * 1.6, -31.6, 0.9, 1.8, 0xe8dcc0));
+      fig.add([tendL, tendR, spikeL2, spikeR2, legs, body, chestScar, spikeL, spikeR, head, crownL, crownM, crownR, brow, eyeL, eyeR, grin, ...teeth]);
       anims.push(scene.tweens.add({ targets: [tendL, tendR], rotation: "+=0.4", duration: 800 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      anims.push(scene.tweens.add({ targets: [eyeL, eyeR], scale: 1.3, duration: 1200 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" })); // the eyes smoulder
       break;
     }
 
@@ -468,12 +588,16 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       shell.setStrokeStyle(1.5, 0x4a3812, 0.9);
       const seam = scene.add.rectangle(0, -8, 1.2, 10, 0x4a3812);
       const head = scene.add.circle(0, -14, 3, 0x6a5220);
+      const antL = scene.add.rectangle(-2, -17, 0.6, 3, 0x4a3812).setRotation(-0.4); // clicking antennae
+      const antR = scene.add.rectangle(2, -17, 0.6, 3, 0x4a3812).setRotation(0.4);
       const eyeL = scene.add.circle(-1.4, -14.5, 0.9, 0xffd54a);
       const eyeR = scene.add.circle(1.4, -14.5, 0.9, 0xffd54a);
+      const mandL = scene.add.triangle(-1.6, -16.2, 0, 2, -2, -1, 1, 0, 0x4a3812);
+      const mandR = scene.add.triangle(1.6, -16.2, 0, 2, 2, -1, -1, 0, 0x4a3812);
       const legL = scene.add.rectangle(-8, -6, 5, 1.2, 0x4a3812).setRotation(0.5);
       const legR = scene.add.rectangle(8, -6, 5, 1.2, 0x4a3812).setRotation(-0.5);
       body = shell;
-      fig.add([legL, legR, shell, seam, head, eyeL, eyeR]);
+      fig.add([legL, legR, shell, seam, head, antL, antR, mandL, mandR, eyeL, eyeR]);
       anims.push(scene.tweens.add({ targets: [legL, legR], rotation: "+=0.4", duration: 160 + jitter * 0.2, yoyo: true, repeat: -1 }));
       break;
     }
@@ -483,13 +607,16 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       baseColor = 0xa88a4a;
       const coil1 = scene.add.ellipse(0, -5, 18, 8, baseColor).setStrokeStyle(1.5, 0x5c4a22);
       const coil2 = scene.add.ellipse(2, -11, 13, 7, 0xb89a5a).setStrokeStyle(1, 0x5c4a22);
+      const hoodFlare = scene.add.ellipse(3, -20, 14, 8, 0x9a7a3a).setStrokeStyle(1, 0x5c4a22, 0.7).setAlpha(0.75); // the cobra's spread hood
       const neck = scene.add.rectangle(4, -18, 4.5, 10, 0xb89a5a).setRotation(0.25);
       const head = scene.add.ellipse(6, -24, 8, 6, 0xc8aa6a).setStrokeStyle(1, 0x5c4a22);
       const eye = scene.add.circle(8, -25, 1.1, 0xe83a2a);
+      const fangL = scene.add.triangle(5, -22, 0, 1.6, -0.6, -1.1, 0.6, -1.1, 0xf0ead8);
+      const fangR = scene.add.triangle(8, -22, 0, 1.6, -0.6, -1.1, 0.6, -1.1, 0xf0ead8);
       const tongue = scene.add.rectangle(11, -24, 4, 0.8, 0xe83a2a);
       body = coil1;
-      fig.add([coil1, coil2, neck, head, eye, tongue]);
-      anims.push(scene.tweens.add({ targets: [neck, head, eye, tongue], x: "+=2", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
+      fig.add([coil1, coil2, hoodFlare, neck, head, eye, fangL, fangR, tongue]);
+      anims.push(scene.tweens.add({ targets: [hoodFlare, neck, head, eye, fangL, fangR, tongue], x: "+=2", duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
 
@@ -504,8 +631,11 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const head = scene.add.circle(0, -25, 4.6, 0xa89c7a).setStrokeStyle(1, 0x6a6046);
       const wrapH = scene.add.rectangle(0, -26, 9.5, 2, 0x8a8066);
       const eye = scene.add.circle(-1.6, -24.4, 1.1, 0x50c8b0); // one embalmed eye still burns
+      const socket = scene.add.circle(1.7, -24.4, 1.3, 0x1a1a12).setAlpha(0.6); // the other went dark
       const armL = scene.add.rectangle(-8, -14, 4, 11, 0x9a8e6c).setRotation(0.35);
-      fig.add([legs, armL, body, wrapA, wrapB, head, wrapH, eye]);
+      const handL = scene.add.circle(-11, -9, 1.7, 0x9a8e6c).setStrokeStyle(1, 0x6a6046, 0.6); // a reaching hand
+      const bandage = scene.add.rectangle(-6, -8, 3, 5, 0x9a8e6c).setRotation(0.3).setAlpha(0.7); // a trailing wrap
+      fig.add([legs, armL, handL, bandage, body, wrapA, wrapB, head, wrapH, eye, socket]);
       anims.push(scene.tweens.add({ targets: eye, alpha: 0.35, duration: 900 + jitter, yoyo: true, repeat: -1 }));
       break;
     }
@@ -520,11 +650,15 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const earL = scene.add.triangle(8, -18, 0, 4, -2, -3, 3, 0, 0xb08a4a);
       const earR = scene.add.triangle(12, -18, 0, 4, 2, -3, -3, 0, 0xb08a4a);
       const eye = scene.add.circle(12, -13.5, 1.1, 0xffe060);
+      const snarl = scene.add.rectangle(13.5, -11, 3.2, 0.9, 0x3a2a12); // a curled lip
+      const fangC = scene.add.triangle(13.5, -10.3, 0, 1.3, -0.6, -1, 0.6, -1, 0xf0ead8);
+      const whisker = scene.add.rectangle(16, -12.5, 6, 0.4, 0xe0cca0).setAlpha(0.5);
       const tail = scene.add.rectangle(-13, -12, 9, 1.8, 0xb08a4a).setRotation(-0.5);
+      const tailTuft = scene.add.ellipse(-17.5, -11, 3, 2.4, 0x8a6a34);
       const legF = scene.add.rectangle(7, -3, 2.4, 7, 0xb08a4a);
       const legB = scene.add.rectangle(-6, -3, 2.4, 7, 0xb08a4a);
       body = bodyE;
-      fig.add([tail, legF, legB, haunch, bodyE, head, earL, earR, eye]);
+      fig.add([tail, tailTuft, legF, legB, haunch, bodyE, head, earL, earR, eye, snarl, fangC, whisker]);
       anims.push(scene.tweens.add({ targets: tail, rotation: "-=0.35", duration: 500 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -536,12 +670,14 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       bodyE.setStrokeStyle(1.5, 0x2a221c, 0.9);
       const wingL = scene.add.triangle(-9, -16, 0, 6, -9, -4, 2, -2, 0x3a322a);
       const wingR = scene.add.triangle(9, -16, 0, 6, 9, -4, -2, -2, 0x3a322a);
+      const ruff = scene.add.ellipse(2, -18.5, 8, 3.4, 0x2a221c); // a shabby collar of feathers
       const neck = scene.add.rectangle(3, -21, 2.5, 7, 0xc8a8a0);
       const head = scene.add.circle(4, -25, 3, 0xc8a8a0);
+      const wattle = scene.add.ellipse(5, -22.4, 2, 2.6, 0xa83838).setAlpha(0.75); // a red wattle
       const beak = scene.add.triangle(8, -25, 0, 2, 5, 0, 0, -2, 0xd8b13a);
       const eye = scene.add.circle(4.6, -25.6, 0.9, 0x1a1a1a);
       body = bodyE;
-      fig.add([wingL, wingR, bodyE, neck, head, beak, eye]);
+      fig.add([wingL, wingR, bodyE, ruff, neck, wattle, head, beak, eye]);
       anims.push(scene.tweens.add({ targets: [wingL, wingR], scaleY: 1.3, duration: 300 + jitter * 0.4, yoyo: true, repeat: -1, ease: "sine.inout" }));
       anims.push(scene.tweens.add({ targets: fig, y: "-=4", duration: 800 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
@@ -576,10 +712,13 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body = scene.add.ellipse(0, -8, 13, 11, baseColor);
       body.setStrokeStyle(1.5, 0x2a2418, 0.9);
       const drip = scene.add.ellipse(-4, -3, 4, 5, 0x3a3224);
+      const drip2 = scene.add.ellipse(5, -2.5, 3, 4, 0x3a3224); // it's always losing bits of itself
       const eyeL = scene.add.circle(-2, -10, 1.3, 0x8ad07f);
       const eyeR = scene.add.circle(2.4, -9, 1.3, 0x8ad07f);
+      const eyeS = scene.add.circle(0.3, -12.5, 0.9, 0x8ad07f); // one too many eyes
+      const maw = scene.add.rectangle(0, -6, 5, 1.4, 0x241e14).setAlpha(0.7);
       const armL = scene.add.ellipse(-7, -7, 5, 4, 0x3a3224);
-      fig.add([drip, armL, body, eyeL, eyeR]);
+      fig.add([drip, drip2, armL, body, maw, eyeL, eyeR, eyeS]);
       anims.push(scene.tweens.add({ targets: body, scaleY: 0.88, duration: 500 + jitter * 0.5, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -608,11 +747,14 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const ridgeA = scene.add.triangle(-6, -12, 0, 3, -2, -3, 3, 1, 0x22362a);
       const ridgeB = scene.add.triangle(0, -13, 0, 3, -2, -3, 3, 1, 0x22362a);
       const snout = scene.add.ellipse(13, -8, 11, 5.5, 0x4a6a54).setStrokeStyle(1, 0x22362a);
+      const nostril = scene.add.circle(17.5, -9, 0.6, 0x22362a);
       const eye = scene.add.circle(9, -11, 1.2, 0xffd54a);
       const teeth = scene.add.rectangle(15, -6.5, 6, 1, 0xd8d0b0);
+      const teethLow = scene.add.rectangle(15, -4.6, 6, 1, 0xc8c0a0); // the lower jaw grins back
+      const fangC = scene.add.triangle(14, -6, 0, -1.6, -0.7, 1.2, 0.7, 1.2, 0xe8e0c8);
       const tail = scene.add.triangle(-15, -7, 0, 3, -7, 0, 0, -3, 0x35503f);
       body = bodyE;
-      fig.add([tail, bodyE, ridgeA, ridgeB, snout, teeth, eye]);
+      fig.add([tail, bodyE, ridgeA, ridgeB, snout, teethLow, teeth, fangC, nostril, eye]);
       anims.push(scene.tweens.add({ targets: tail, rotation: "+=0.3", duration: 420 + jitter * 0.4, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -624,11 +766,15 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body.setStrokeStyle(2, 0x18301c, 0.9);
       const vineL = scene.add.rectangle(-11, -12, 12, 2.5, 0x244a28).setRotation(-0.7);
       const vineR = scene.add.rectangle(11, -16, 12, 2.5, 0x244a28).setRotation(0.6);
+      const thornL = scene.add.triangle(-13, -14, 0, 3, -2, -2, 2, -1, 0x1a3016).setRotation(-0.7);
+      const thornR = scene.add.triangle(14, -18, 0, 3, 2, -2, -2, -1, 0x1a3016).setRotation(0.6);
+      const maw = scene.add.ellipse(-1, -14, 6, 3.4, 0x0c1808); // a wet gash of a mouth
+      const teethV = scene.add.rectangle(-1, -14, 5, 0.8, 0xc8e0a0);
       const bloom = scene.add.circle(3, -24, 3, 0xd85a8a).setStrokeStyle(1, 0x6a2242);
       const eyeA = scene.add.circle(-3, -18, 1.4, 0xcfff60);
       const eyeB = scene.add.circle(2, -13, 1.2, 0xcfff60);
       const roots = scene.add.ellipse(0, -3, 16, 6, 0x18301c);
-      fig.add([roots, vineL, vineR, body, bloom, eyeA, eyeB]);
+      fig.add([roots, vineL, thornL, vineR, thornR, body, maw, teethV, bloom, eyeA, eyeB]);
       anims.push(scene.tweens.add({ targets: [vineL, vineR], rotation: "+=0.35", duration: 800 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -642,10 +788,13 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const shawl = scene.add.ellipse(0, -21, 14, 6, 0x2a3a2e);
       const head = scene.add.circle(0, -26, 4, 0x8aa082);
       const hair = scene.add.ellipse(0, -29, 9, 4, 0x4a5a44);
+      const nose = scene.add.triangle(0, -25, 0, 2.6, -1, -1.5, 1.8, -1, 0x7a9072); // a long hooked nose
+      const wart = scene.add.circle(1.4, -24, 0.6, 0x5a6a52);
+      const grin = scene.add.rectangle(-0.3, -23.4, 2.6, 0.8, 0x24322a);
       const eyeL = scene.add.circle(-1.5, -26, 1, 0xcfff60);
       const eyeR = scene.add.circle(1.5, -26, 1, 0xcfff60);
       const orb = scene.add.circle(9, -18, 2.6, 0x8ad0ff, 0.9);
-      fig.add([skirt, body, shawl, orb, head, hair, eyeL, eyeR]);
+      fig.add([skirt, body, shawl, orb, head, hair, eyeL, eyeR, nose, wart, grin]);
       anims.push(scene.tweens.add({ targets: orb, y: "-=3", alpha: 0.5, duration: 700 + jitter, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -661,23 +810,28 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       const head = scene.add.circle(0, -24, 4.5, 0x5a3428);
       const eyeL = scene.add.circle(-1.8, -24.5, 1.2, 0xffb040);
       const eyeR = scene.add.circle(1.8, -24.5, 1.2, 0xffb040);
-      fig.add([legs, body, crack, crack2, head, eyeL, eyeR]);
-      anims.push(scene.tweens.add({ targets: [crack, crack2], alpha: 0.3, duration: 500 + jitter * 0.5, yoyo: true, repeat: -1 }));
+      const maw = scene.add.rectangle(0, -21.6, 4, 1.4, 0xff8828).setAlpha(0.9); // embers behind the teeth
+      fig.add([legs, body, crack, crack2, head, eyeL, eyeR, maw]);
+      anims.push(scene.tweens.add({ targets: [crack, crack2, maw], alpha: 0.3, duration: 500 + jitter * 0.5, yoyo: true, repeat: -1 }));
       break;
     }
 
     case "doomguard": {
       // a wall of black plate that remembers being a soldier
       baseColor = 0x2c2430;
+      const cape = scene.add.triangle(0, -25, 0, 0, -11, 22, 11, 22, 0x1a1420).setAlpha(0.92); // a rotted war-cape
       const legs = scene.add.rectangle(0, -5, 15, 10, 0x1c161e);
       body = scene.add.rectangle(0, -17, 19, 18, baseColor);
       body.setStrokeStyle(2, 0x14101a, 0.9);
+      const sigil = scene.add.triangle(0, -16, 0, -5, -3.2, 3, 3.2, 3, 0xe83a2a).setAlpha(0.4); // a red sigil, long dead
       const pauldronL = scene.add.ellipse(-10, -24, 9, 7, 0x3a3040);
       const pauldronR = scene.add.ellipse(10, -24, 9, 7, 0x3a3040);
       const helm = scene.add.rectangle(0, -30, 10, 9, 0x3a3040).setStrokeStyle(1, 0x14101a);
+      const crest = scene.add.rectangle(0, -35.5, 2, 3, 0x6a1a1a); // a broken crest
       const slit = scene.add.rectangle(0, -30, 7, 1.6, 0xe83a2a);
       const blade = scene.add.rectangle(14, -20, 3, 22, 0x6a6a78).setStrokeStyle(1, 0x2c2c36);
-      fig.add([legs, blade, body, pauldronL, pauldronR, helm, slit]);
+      const bladeEdge = scene.add.rectangle(15.4, -20, 1, 22, 0xc8ccd4).setAlpha(0.6);
+      fig.add([cape, legs, blade, bladeEdge, body, sigil, pauldronL, pauldronR, helm, crest, slit]);
       anims.push(scene.tweens.add({ targets: slit, alpha: 0.4, duration: 1100 + jitter, yoyo: true, repeat: -1 }));
       break;
     }
@@ -707,11 +861,14 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body.setStrokeStyle(1.5, 0x501814, 0.9);
       const sinewA = scene.add.rectangle(0, -12, 11, 1.2, 0x6a2420).setRotation(0.4);
       const sinewB = scene.add.rectangle(0, -15, 11, 1.2, 0x6a2420).setRotation(-0.35);
+      const rib = scene.add.rectangle(0, -12.5, 10, 1, 0xd88a7a).setAlpha(0.5); // wet, exposed bone
       const head = scene.add.circle(0, -21, 3.6, 0xb0453a);
       const jaw = scene.add.rectangle(0, -18.5, 5, 1.6, 0x2a0c0a);
+      const fangL = scene.add.triangle(-1.2, -19, 0, 1.4, -0.6, -1, 0.6, -1, 0xe8dcd0);
+      const fangR = scene.add.triangle(1.2, -19, 0, 1.4, -0.6, -1, 0.6, -1, 0xe8dcd0);
       const eyeL = scene.add.circle(-1.4, -21.5, 1, 0xffffff);
       const eyeR = scene.add.circle(1.4, -21.5, 1, 0xffffff);
-      fig.add([legs, body, sinewA, sinewB, head, jaw, eyeL, eyeR]);
+      fig.add([legs, body, rib, sinewA, sinewB, head, jaw, fangL, fangR, eyeL, eyeR]);
       anims.push(scene.tweens.add({ targets: jaw, scaleY: 1.8, duration: 260 + jitter * 0.3, yoyo: true, repeat: -1, ease: "sine.inout" }));
       break;
     }
@@ -744,6 +901,18 @@ export function buildMonsterFigure(scene: Phaser.Scene, kind: string): MonsterFi
       body.setStrokeStyle(2, 0x2f3d22, 0.9);
       fig.add(body);
     }
+  }
+
+  // --- universal volume: a soft top-light + a low core-shadow on every body, slipped in
+  // just ABOVE the body (below faces/limbs/weapons) so nothing gets dulled. The bespoke
+  // kinds above already carry their own shading, so skip them. ---
+  if (!["imp", "zombie", "skeleton", "archer", "wraith"].includes(kind)) {
+    const bw = body.displayWidth || 16, bh = body.displayHeight || 16, bx = body.x, by = body.y;
+    const idx = fig.getIndex(body);
+    const core = scene.add.ellipse(bx + bw * 0.1, by + bh * 0.2, bw * 0.72, bh * 0.62, 0x000000).setAlpha(0.16);
+    const lit = scene.add.ellipse(bx - bw * 0.2, by - bh * 0.24, bw * 0.55, bh * 0.5, 0xffffff).setAlpha(0.1);
+    fig.addAt(core, idx + 1);
+    fig.addAt(lit, idx + 2);
   }
 
   // everything alive breathes (everything undead approximates it)

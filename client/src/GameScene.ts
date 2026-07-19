@@ -40,7 +40,7 @@ import {
   townNpcById,
 } from "@hollowmark/common";
 import type { TownBuilding, TownStyle } from "@hollowmark/common";
-import { Sfx } from "./sfx";
+import { sfx as sharedSfx } from "./sfx";
 import { ensureItemIcons } from "./icons";
 import { buildMonsterFigure } from "./mobArt";
 import { generateThemeTextures } from "./materials";
@@ -57,6 +57,18 @@ const CLASS_COLORS: Record<string, number> = {
   paladin: 0xc9a227,
   necromancer: 0x6a8f7a,
   druid: 0x9a6a3a,
+};
+// The UNARMORED body per class — pure identity before any gear (barbarian = bare skin,
+// necromancer = near-black robes, druid = brown leathers, …). Chest armor recolors the torso
+// over this and hides the bare-material detail, so the more you equip, the more armored you read.
+// The class hue (CLASS_COLORS) rides on top as a sash/warpaint accent so the class stays legible.
+const CLASS_BODY: Record<string, { torso: number; hair: number; material: "skin" | "leather" | "robe" | "cloth" | "fur"; hooded?: boolean }> = {
+  barbarian: { torso: 0xc98a5a, hair: 0x6b3a24, material: "skin" },
+  rogue: { torso: 0x40502f, hair: 0x1e4a2a, material: "leather", hooded: true },
+  sorcerer: { torso: 0x2b3c66, hair: 0x2a2a4a, material: "robe" },
+  paladin: { torso: 0xa89a72, hair: 0xd8c890, material: "cloth" },
+  necromancer: { torso: 0x1e1d26, hair: 0x2a3a34, material: "robe", hooded: true },
+  druid: { torso: 0x5a4326, hair: 0x4a3a1e, material: "fur" },
 };
 // per-kind monster art lives in mobArt.ts
 
@@ -92,14 +104,24 @@ interface Entity {
   offhandImg?: Phaser.GameObjects.Image;
   helmImg?: Phaser.GameObjects.Image;
   gearSig?: string;
-  // limbs, for the walk cycle
-  legL?: Phaser.GameObjects.Rectangle;
-  legR?: Phaser.GameObjects.Rectangle;
-  armF?: Phaser.GameObjects.Rectangle;
-  armB?: Phaser.GameObjects.Rectangle;
+  // limbs, for the walk cycle — each is a container (shin+foot / arm+hand) rotated at the joint
+  legL?: Phaser.GameObjects.Container;
+  legR?: Phaser.GameObjects.Container;
+  armF?: Phaser.GameObjects.Container;
+  armB?: Phaser.GameObjects.Container;
+  legShapes?: Phaser.GameObjects.Rectangle[]; // shins (recolored by boots)
+  feet?: Phaser.GameObjects.Ellipse[];
+  armShapes?: Phaser.GameObjects.Rectangle[]; // upper arms (recolored by chest/wolf)
+  hands?: Phaser.GameObjects.Ellipse[];
   torsoShape?: Phaser.GameObjects.Rectangle;
   beltShape?: Phaser.GameObjects.GameObject[];
   pauldrons?: Phaser.GameObjects.GameObject[];
+  // detail-pass: bare class body (hidden under a chest piece), shoulder caps, extra hair locks
+  bodyExtras?: Phaser.GameObjects.Shape[];
+  shoulders?: Phaser.GameObjects.Ellipse[];
+  hairExtras?: Phaser.GameObjects.Shape[];
+  armorDetail?: Phaser.GameObjects.Shape[]; // per-material chest detail (rivets, links, trim)
+  cape?: Phaser.GameObjects.Shape[]; // a cloak for the well-geared
   swingTween?: Phaser.Tweens.Tween;
   // monster idle animations, killed on death
   anims?: Phaser.Tweens.Tween[];
@@ -155,7 +177,7 @@ export class GameScene extends Phaser.Scene {
   private loot = new Map<string, LootEntity>();
   private corpses: Phaser.GameObjects.GameObject[] = [];
 
-  private sfx = new Sfx();
+  private sfx = sharedSfx;
   private lastMoveSend = 0;
   private pendingPickup: string | null = null;
   private pendingPickupSince = 0;
@@ -2979,6 +3001,17 @@ export class GameScene extends Phaser.Scene {
         padding: { x: 3, y: 2 },
       })
       .setOrigin(0.5);
+    // give every townsperson a face — eyes on each skin-toned head circle, whatever the branch built it
+    const SKIN_TONES = new Set([0xc8a888, 0xd0b090, 0xc8b090, 0xd8b090, 0xc89878]);
+    const isHead = (o: Phaser.GameObjects.GameObject): o is Phaser.GameObjects.Arc =>
+      o instanceof Phaser.GameObjects.Arc && o.radius >= 3 && o.radius <= 6 && SKIN_TONES.has(o.fillColor);
+    for (const h of parts.filter(isHead)) {
+      const r = h.radius, e = Math.max(0.7, r * 0.16);
+      parts.push(
+        this.add.circle(h.x - r * 0.42, h.y - r * 0.12, e, 0x2a2018),
+        this.add.circle(h.x + r * 0.42, h.y - r * 0.12, e, 0x2a2018),
+      );
+    }
     container.add([...parts]);
     // magical interactables (portals, waypoint, altar, shrines) bleed their own
     // light — a true per-object glow in their hue, not a flat colored disc
@@ -3018,32 +3051,107 @@ export class GameScene extends Phaser.Scene {
     const container = this.add.container(0, 0);
     const shadow = this.add.ellipse(0, 0, 26, 13, 0x000000, 0.35);
 
-    // layered figure: legs / arms / tunic / head / hair — class-flavored proportions
+    // layered figure — pure class identity when unarmored; gear layers over it (refreshGear).
+    const cb = CLASS_BODY[player.cls] ?? CLASS_BODY.paladin;
+    const dk = (c: number, p: number) => Phaser.Display.Color.IntegerToColor(c).darken(p).color;
+    const lt = (c: number, p: number) => Phaser.Display.Color.IntegerToColor(c).lighten(p).color;
     const figure = this.add.container(0, 0);
     const torsoW = player.cls === "barbarian" ? 14 : player.cls === "paladin" ? 13 : 11;
-    const tallRobe = player.cls === "sorcerer" || player.cls === "necromancer";
-    const torsoH = tallRobe ? 17 : 12;
-    const torsoY = tallRobe ? -14 : -15;
-    // limbs pivot at their tops so the walk cycle swings from hip and shoulder
-    const legL = this.add.rectangle(-2.5, -9, 3.5, 8, 0x39332b).setOrigin(0.5, 0);
-    const legR = this.add.rectangle(2.5, -9, 3.5, 8, 0x39332b).setOrigin(0.5, 0);
-    const armColor = Phaser.Display.Color.IntegerToColor(color).darken(20).color;
-    const armB = this.add.rectangle(-torsoW / 2 - 1, -20, 3, 9, armColor).setOrigin(0.5, 0);
-    const armF = this.add.rectangle(torsoW / 2 + 1, -20, 3, 9, armColor).setOrigin(0.5, 0);
-    const torso = this.add.rectangle(0, torsoY, torsoW, torsoH, color);
-    torso.setStrokeStyle(1, 0x000000, 0.55);
-    const head = this.add.circle(0, -25, 5, 0xd8b090);
-    head.setStrokeStyle(1, 0x000000, 0.35);
-    const HAIR: Record<string, number> = {
-      barbarian: 0x6b3a24, rogue: 0x1e4a2a, sorcerer: 0x2a2a4a,
-      paladin: 0xd8c890, necromancer: 0x2a3a34, druid: 0x4a3a1e,
+    const robe = cb.material === "robe";
+    const torsoH = robe ? 17 : 12;
+    const torsoY = robe ? -14 : -15;
+    const top = torsoY - torsoH / 2, bot = torsoY + torsoH / 2;
+    // limbs are containers pivoting at hip/shoulder — so the foot/hand swings with the leg/arm
+    const legColor = 0x39332b, footColor = dk(legColor, 30);
+    const mkLeg = (x: number) => {
+      const c = this.add.container(x, -9);
+      const shin = this.add.rectangle(0, 0, 3.5, 8, legColor).setOrigin(0.5, 0);
+      const foot = this.add.ellipse(0.9, 8, 4.4, 2.6, footColor).setStrokeStyle(1, 0x000000, 0.4);
+      c.add([shin, foot]);
+      return { c, shin, foot };
     };
-    const hairColor = HAIR[player.cls] ?? 0x2a2a4a;
-    const hooded = player.cls === "rogue" || player.cls === "necromancer";
-    const hair: Phaser.GameObjects.Shape = hooded
-      ? this.add.triangle(0, -28, 0, 6, 5, -3, -5, -3, hairColor) // hood peak
-      : this.add.rectangle(0, -29, 9, 4, hairColor);
-    figure.add([legL, legR, armB, torso, head, hair, armF]);
+    const L = mkLeg(-2.5), R = mkLeg(2.5);
+    const legL = L.c, legR = R.c, legShapes = [L.shin, R.shin], feet = [L.foot, R.foot];
+    const armColor = dk(cb.torso, 20), handColor = dk(cb.torso, 6); // bare arms match the body
+    const mkArm = (x: number) => {
+      const c = this.add.container(x, -20);
+      const limb = this.add.rectangle(0, 0, 3, 9, armColor).setOrigin(0.5, 0);
+      const hand = this.add.ellipse(0, 9.4, 2.8, 2.8, handColor).setStrokeStyle(1, 0x000000, 0.3);
+      c.add([limb, hand]);
+      return { c, limb, hand };
+    };
+    const AB = mkArm(-torsoW / 2 - 1), AF = mkArm(torsoW / 2 + 1);
+    const armB = AB.c, armF = AF.c, armShapes = [AB.limb, AF.limb], hands = [AB.hand, AF.hand];
+    const torso = this.add.rectangle(0, torsoY, torsoW, torsoH, cb.torso).setStrokeStyle(1, 0x000000, 0.55);
+
+    // class-specific BARE-BODY detail — shown unarmored, hidden by a chest piece
+    const bodyExtras: Phaser.GameObjects.Shape[] = [];
+    if (cb.material === "skin") { // a barbarian's bare muscled chest, fur waist, a leather baldric
+      bodyExtras.push(
+        this.add.ellipse(-torsoW * 0.24, torsoY - 3, 5, 3.5, dk(cb.torso, 32)).setAlpha(0.5),
+        this.add.ellipse(torsoW * 0.24, torsoY - 3, 5, 3.5, dk(cb.torso, 32)).setAlpha(0.5),
+        this.add.rectangle(0, torsoY + 1, 1.6, torsoH * 0.5, dk(cb.torso, 26)).setAlpha(0.4),
+        this.add.rectangle(0, bot - 1, torsoW + 2, 3.5, 0x6b5238).setStrokeStyle(1, 0x3a2c1c, 0.6),
+        this.add.rectangle(0, torsoY, 2.4, torsoH + 2, 0x5a3b22).setRotation(0.5).setAlpha(0.9),
+      );
+    } else if (robe) { // a caster's robe: vertical folds + a hem shadow
+      bodyExtras.push(
+        this.add.rectangle(-torsoW * 0.24, torsoY + 2, 1, torsoH - 4, 0x000000).setAlpha(0.2),
+        this.add.rectangle(torsoW * 0.24, torsoY + 2, 1, torsoH - 4, 0x000000).setAlpha(0.2),
+        this.add.rectangle(0, bot - 0.5, torsoW, 2, 0x000000).setAlpha(0.25),
+      );
+    } else if (cb.material === "fur") { // a druid's fur shoulder mantle
+      bodyExtras.push(
+        this.add.ellipse(0, top + 1, torsoW * 1.28, 5, 0x7a6a4e).setStrokeStyle(1, 0x4a3a26, 0.5),
+        this.add.rectangle(-torsoW * 0.28, torsoY + 3, 1.6, torsoH * 0.5, 0x000000).setAlpha(0.18),
+      );
+    } else if (cb.material === "leather") { // a rogue's studded leather
+      for (let r = 0; r < 2; r++) for (const sx of [-torsoW * 0.28, 0, torsoW * 0.28])
+        bodyExtras.push(this.add.circle(sx, torsoY - 2 + r * 5, 0.7, 0xb7bec9).setAlpha(0.85));
+    } else { // a paladin's quilted gambeson
+      bodyExtras.push(
+        this.add.rectangle(-torsoW * 0.22, torsoY, 0.8, torsoH - 3, 0x000000).setAlpha(0.16),
+        this.add.rectangle(torsoW * 0.22, torsoY, 0.8, torsoH - 3, 0x000000).setAlpha(0.16),
+      );
+    }
+
+    // generic VOLUME — alpha overlays, so they read over any armor colour
+    const shadeParts = [
+      this.add.rectangle(-torsoW * 0.28, torsoY + 0.5, torsoW * 0.3, torsoH - 3, 0xffffff).setAlpha(0.12),
+      this.add.rectangle(torsoW * 0.3, torsoY + 1, torsoW * 0.32, torsoH - 2, 0x000000).setAlpha(0.18),
+      this.add.rectangle(0, top + 1, torsoW - 1, 2, 0x000000).setAlpha(0.26), // collar shadow
+    ];
+    // the class accent — a sash in the class hue (always shown, keeps the class legible)
+    const accent = this.add.rectangle(0, torsoY, torsoW, 2.4, color).setRotation(0.5).setAlpha(0.9);
+    // neck + shoulder caps round the silhouette
+    const neck = this.add.rectangle(0, -20.5, 4, 3, 0xc79a70);
+    const shoulderL = this.add.ellipse(-torsoW / 2 + 0.5, top + 1, 5, 4.4, dk(cb.torso, 12)).setStrokeStyle(1, 0x000000, 0.4);
+    const shoulderR = this.add.ellipse(torsoW / 2 - 0.5, top + 1, 5, 4.4, dk(cb.torso, 12)).setStrokeStyle(1, 0x000000, 0.4);
+
+    const head = this.add.circle(0, -25, 5, 0xd8b090).setStrokeStyle(1, 0x000000, 0.35);
+    const hooded = !!cb.hooded;
+    // a face: a hood's shadow with pale eyes, or a brow + eyes + nose
+    const face: Phaser.GameObjects.Shape[] = hooded
+      ? [this.add.ellipse(0, -24.5, 7.2, 7.8, 0x000000).setAlpha(0.5),
+         this.add.circle(-1.4, -25, 0.7, 0x9aa0b0), this.add.circle(1.4, -25, 0.7, 0x9aa0b0)]
+      : [this.add.rectangle(0, -26.3, 7, 1.4, 0x000000).setAlpha(0.28),
+         this.add.circle(-1.6, -25, 0.8, 0x2a2018), this.add.circle(1.6, -25, 0.8, 0x2a2018),
+         this.add.rectangle(0, -23.6, 2.4, 1, 0xb07a52).setAlpha(0.5)];
+    // hair (or a hood), with a couple of extra locks that a helm hides
+    let hair: Phaser.GameObjects.Shape;
+    const hairExtras: Phaser.GameObjects.Shape[] = [];
+    if (hooded) {
+      hair = this.add.triangle(0, -28, 0, 6, 5.5, -3.5, -5.5, -3.5, cb.hair);
+      hairExtras.push(this.add.triangle(0, -28, 0, 3, 3, -4, -3, -4, dk(cb.hair, 30)));
+    } else {
+      hair = this.add.ellipse(0, -28.5, 10.4, 6.8, cb.hair);
+      hairExtras.push(
+        this.add.rectangle(-4.4, -26, 1.8, 3.5, cb.hair),
+        this.add.rectangle(4.4, -26, 1.8, 3.5, cb.hair),
+        this.add.ellipse(-1.6, -29.6, 5, 3, lt(cb.hair, 28)).setAlpha(0.55),
+      );
+    }
+    figure.add([legL, legR, armB, torso, ...bodyExtras, ...shadeParts, accent, neck, shoulderL, shoulderR, head, ...face, hair, ...hairExtras, armF]);
 
     container.add([shadow, figure]);
 
@@ -3069,14 +3177,26 @@ export class GameScene extends Phaser.Scene {
     container.setPosition(s.x, s.y).setDepth(s.y);
 
     const ent: Entity = {
-      container, body, baseColor: color, hpFg, schema: player, label,
+      container, body, baseColor: cb.torso, hpFg, schema: player, label,
       lastLevel: player.level, figure, hairShape: hair, gearSig: "",
       legL, legR, armF, armB, torsoShape: torso,
+      legShapes, feet, armShapes, hands,
+      bodyExtras, shoulders: [shoulderL, shoulderR], hairExtras,
     };
     this.players.set(sessionId, ent);
     this.refreshGear(ent);
 
     if (isSelf) this.cameras.main.startFollow(container, false, 0.08, 0.08);
+  }
+
+  // recolor the limb sub-shapes (containers can't be filled directly)
+  private tintArms(ent: Entity, c: number) {
+    ent.armShapes?.forEach((s) => s.setFillStyle(c));
+    ent.hands?.forEach((h) => h.setFillStyle(Phaser.Display.Color.IntegerToColor(c).darken(6).color));
+  }
+  private tintLegs(ent: Entity, leg: number) {
+    ent.legShapes?.forEach((s) => s.setFillStyle(leg));
+    ent.feet?.forEach((f) => f.setFillStyle(Phaser.Display.Color.IntegerToColor(leg).darken(30).color));
   }
 
   // draw equipped gear on the figure, from synced base keys —
@@ -3095,7 +3215,9 @@ export class GameScene extends Phaser.Scene {
     ent.beltShape?.forEach((o) => o.destroy());
     ent.pauldrons?.forEach((o) => o.destroy());
     ent.helmFlair?.forEach((o) => o.destroy());
-    ent.beltShape = ent.pauldrons = ent.helmFlair = undefined;
+    ent.armorDetail?.forEach((o) => o.destroy());
+    ent.cape?.forEach((o) => o.destroy());
+    ent.beltShape = ent.pauldrons = ent.helmFlair = ent.armorDetail = ent.cape = undefined;
     ent.aura?.destroy();
     ent.aura = undefined;
 
@@ -3128,11 +3250,16 @@ export class GameScene extends Phaser.Scene {
       plate: { color: 0xb0b4c0, stroke: 0xd8dce4, pauldrons: true },
     };
     const chest = CHEST_STYLES[ent.schema.chestBase];
-    const torsoColor = chest?.color ?? ent.baseColor;
+    // no chest → the bare class body (barbarian skin, necro black, druid brown); armor covers it
+    const cbDef = CLASS_BODY[ent.schema.cls] ?? CLASS_BODY.paladin;
+    const torsoColor = chest?.color ?? cbDef.torso;
+    ent.baseColor = torsoColor; // keep the hit-flash restore in sync with what's worn
     ent.torsoShape?.setFillStyle(torsoColor).setStrokeStyle(1, chest?.stroke ?? 0x000000, 0.7);
     const armColor = Phaser.Display.Color.IntegerToColor(torsoColor).darken(20).color;
-    ent.armF?.setFillStyle(armColor);
-    ent.armB?.setFillStyle(armColor);
+    this.tintArms(ent, armColor);
+    ent.shoulders?.forEach((sh) => sh.setFillStyle(Phaser.Display.Color.IntegerToColor(torsoColor).darken(12).color));
+    // the bare-body detail (muscle, fur, folds, studs) is only seen with no chest piece
+    ent.bodyExtras?.forEach((o) => o.setVisible(!chest));
     if (chest?.pauldrons && ent.torsoShape) {
       const w = ent.torsoShape.width;
       const y = ent.torsoShape.y - ent.torsoShape.height / 2 + 1;
@@ -3142,11 +3269,59 @@ export class GameScene extends Phaser.Scene {
       ent.pauldrons = [pl, pr];
     }
 
+    // --- per-material armour detail: makes a worn chest read as its material, not a flat recolor ---
+    if (chest && ent.torsoShape) {
+      const t = ent.torsoShape, w = t.width, h = t.height, cy = t.y, tp = cy - h / 2, bt = cy + h / 2;
+      const lite = Phaser.Display.Color.IntegerToColor(torsoColor).lighten(28).color;
+      const drk = Phaser.Display.Color.IntegerToColor(torsoColor).darken(28).color;
+      const d: Phaser.GameObjects.Shape[] = [];
+      const mat = ent.schema.chestBase;
+      if (mat === "plate") {
+        // a segmented breastplate: centre ridge + two chest plates + a row of rivets
+        d.push(this.add.rectangle(0, cy, 1.4, h - 2, lite).setAlpha(0.6));
+        d.push(this.add.ellipse(-w * 0.24, tp + 3.5, 5, 4, lite).setAlpha(0.35));
+        d.push(this.add.ellipse(w * 0.24, tp + 3.5, 5, 4, drk).setAlpha(0.3));
+        for (const rx of [-w * 0.34, w * 0.34]) for (const ry of [tp + 2.5, cy, bt - 2.5])
+          d.push(this.add.circle(rx, ry, 0.7, lite).setAlpha(0.8));
+      } else if (mat === "chainmail") {
+        // a mail weave: staggered link dots
+        for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++)
+          d.push(this.add.circle(-w * 0.3 + c * (w * 0.2) + (r % 2) * (w * 0.1), tp + 2 + r * (h / 5), 0.6, drk).setAlpha(0.55));
+      } else if (mat === "studded") {
+        // rows of iron studs on leather
+        for (let r = 0; r < 3; r++) for (const sx of [-w * 0.28, 0, w * 0.28])
+          d.push(this.add.circle(sx, tp + 3 + r * (h / 4), 0.8, 0xc0c6d0).setAlpha(0.85));
+      } else if (mat === "leather") {
+        // stitched seams down the flanks
+        d.push(this.add.rectangle(-w * 0.32, cy, 0.7, h - 3, drk).setAlpha(0.5));
+        d.push(this.add.rectangle(w * 0.32, cy, 0.7, h - 3, drk).setAlpha(0.5));
+      } else if (mat === "robe") {
+        // arcane trim + a hanging fold
+        d.push(this.add.rectangle(0, tp + 1.5, w - 2, 1.4, lite).setAlpha(0.5));
+        d.push(this.add.rectangle(0, cy, 0.8, h - 3, 0x000000).setAlpha(0.22));
+        d.push(this.add.rectangle(0, bt - 0.5, w, 1.6, 0x000000).setAlpha(0.25));
+      }
+      fig.add(d);
+      ent.armorDetail = d;
+    }
+
+    // --- a cloak for the well-geared: your best gear billows behind you ---
+    if ((ent.schema.gearTier ?? 0) >= 4 && ent.torsoShape) {
+      const t = ent.torsoShape, tp = t.y - t.height / 2;
+      const CAPE: Record<number, number> = { 4: 0x6a2a34, 5: 0x7a1e1e, 6: 0x4a2a6a }; // unique/legendary/epic
+      const cc = CAPE[ent.schema.gearTier] ?? 0x5a2a34;
+      const cape = this.add.triangle(0, tp + 1, 0, 0, -t.width * 0.7, t.height + 6, t.width * 0.7, t.height + 6, cc)
+        .setStrokeStyle(1, 0x000000, 0.5).setAlpha(0.92);
+      const clasp = this.add.circle(0, tp + 1, 1.4, 0xd8b13a);
+      fig.addAt(cape, 0); // behind the whole figure
+      fig.add(clasp);
+      ent.cape = [cape, clasp];
+    }
+
     // boots recolor the legs
     const BOOT_COLORS: Record<string, number> = { boots: 0x5a4632, greaves: 0x9aa0ae };
     const legColor = BOOT_COLORS[ent.schema.bootsBase] ?? 0x39332b;
-    ent.legL?.setFillStyle(legColor);
-    ent.legR?.setFillStyle(legColor);
+    this.tintLegs(ent, legColor);
 
     // a belt is a waist-wrap with a buckle
     const BELT_COLORS: Record<string, number> = { sash: 0x7a2a34, warbelt: 0x54402a, girdle: 0x8a8f9a };
@@ -3197,6 +3372,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     ent.hairShape?.setVisible(!ent.helmImg);
+    ent.hairExtras?.forEach((o) => o.setVisible(!ent.helmImg));
   }
 
   private addMonster(monster: any, id: string) {
@@ -4139,8 +4315,7 @@ export class GameScene extends Phaser.Scene {
         ent.figure.add([earL, earR, snout]);
         ent.wolfParts = [earL, earR, snout];
         ent.torsoShape?.setFillStyle(0x5a4a3a);
-        ent.armF?.setFillStyle(0x4a3c2e);
-        ent.armB?.setFillStyle(0x4a3c2e);
+        this.tintArms(ent, 0x4a3c2e);
       } else if (!isWolf && ent.wolfOn) {
         ent.wolfOn = false;
         ent.wolfParts?.forEach((o) => o.destroy());
