@@ -105,11 +105,11 @@ const DOLL_LAYOUT: Array<{ slot: EquipSlot; label: string; col: -1 | 0 | 1; row:
   { slot: "boots", label: "boots", col: -1, row: 4 }, // feet
   { slot: "ring2", label: "ring 2", col: 1, row: 4 },
 ];
-const COLGAP = 92; // how far the side columns sit from centre — wide enough to reveal the figure
-const ROWGAP = 56;
+const COLGAP = 104; // how far the side columns sit from centre — wide enough to reveal the figure
+const ROWGAP = 70;
 const DOLL_ROWS = 5; // 0 head … 4 feet
 
-const PANEL_W = 372;
+const PANEL_W = 400;
 const STASH_W = 264; // extra panel width when the stash is open
 const CELL = 46;
 const GAP = 8;
@@ -604,26 +604,59 @@ export class InventoryPanel {
     const footY = top + (DOLL_ROWS - 1) * ROWGAP + 6;
     g.lineStyle(1, t, 0.3); g.strokeEllipse(cx, footY, 64, 14);
 
-    // the silhouette, drawn boldly now that the centre is clear (still monochrome pewter)
-    const H = top + 26; // head centre
-    g.fillStyle(t, 0.30);
-    g.fillCircle(cx, H, 17); // head
-    g.fillRect(cx - 6, H + 14, 12, 12); // neck
-    // torso: broad shoulders tapering to the waist
+    // the silhouette — ONE continuous outline for neck, torso, arms and legs, filled once.
+    // (the figure used to be three overlapping translucent shapes; the arms doubled over the
+    //  chest and blended it darker. A single path can never double-blend against itself.)
+    const H = top + 26;              // head centre
+    const R = 17;                    // head radius
+    const shoulderY = H + 32;        // where the shoulders cap
+    const hipY = H + 122;            // waistline / belt
+    const ankleY = footY - 6;
+    const kneeY = hipY + (ankleY - hipY) * 0.5;
+
+    g.fillStyle(t, 0.32);
+    g.lineStyle(1.5, t, 0.5);        // the same path also strokes, for a crisp defining edge
     g.beginPath();
-    g.moveTo(cx - 34, H + 26); g.lineTo(cx + 34, H + 26);
-    g.lineTo(cx + 24, H + 118); g.lineTo(cx - 24, H + 118); g.closePath(); g.fillPath();
-    // arms reaching down toward the hand slots
-    g.fillStyle(t, 0.24);
-    g.beginPath(); g.moveTo(cx - 30, H + 30); g.lineTo(cx - 15, H + 32); g.lineTo(cx - 30, H + 116); g.lineTo(cx - 46, H + 112); g.closePath(); g.fillPath();
-    g.beginPath(); g.moveTo(cx + 30, H + 30); g.lineTo(cx + 15, H + 32); g.lineTo(cx + 30, H + 116); g.lineTo(cx + 46, H + 112); g.closePath(); g.fillPath();
-    // legs down to the boots
-    g.fillStyle(t, 0.28);
-    g.beginPath(); g.moveTo(cx - 22, H + 118); g.lineTo(cx - 4, H + 118); g.lineTo(cx - 6, footY - 6); g.lineTo(cx - 24, footY - 6); g.closePath(); g.fillPath();
-    g.beginPath(); g.moveTo(cx + 22, H + 118); g.lineTo(cx + 4, H + 118); g.lineTo(cx + 6, footY - 6); g.lineTo(cx + 24, footY - 6); g.closePath(); g.fillPath();
-    // definition: head outline + a belt line at the waist
-    g.lineStyle(1.5, t, 0.5); g.strokeCircle(cx, H, 17);
-    g.lineStyle(2, t, 0.4); g.beginPath(); g.moveTo(cx - 25, H + 118); g.lineTo(cx + 25, H + 118); g.strokePath();
+    g.moveTo(cx - 6, H + 16);                       // neck, left (meets head base above)
+    g.lineTo(cx + 6, H + 16);                        // neck, right
+    g.lineTo(cx + 13, shoulderY - 3);               // right shoulder, inner rise
+    g.lineTo(cx + 32, shoulderY);                   // right shoulder cap
+    g.lineTo(cx + 39, H + 104);                      // right arm, outer
+    g.lineTo(cx + 31, H + 114);                      // right hand
+    g.lineTo(cx + 21, H + 106);                      // right arm, inner
+    g.lineTo(cx + 19, shoulderY + 20);               // right underarm
+    g.lineTo(cx + 22, hipY);                          // right waist → hip
+    g.lineTo(cx + 20, kneeY);                         // right knee
+    g.lineTo(cx + 18, ankleY);                        // right ankle
+    g.lineTo(cx + 5, ankleY);                         // right foot, inner
+    g.lineTo(cx + 3, kneeY);                          // right inner leg
+    g.lineTo(cx, hipY + 2);                           // crotch
+    g.lineTo(cx - 3, kneeY);                          // left inner leg
+    g.lineTo(cx - 5, ankleY);                         // left foot, inner
+    g.lineTo(cx - 18, ankleY);                        // left ankle
+    g.lineTo(cx - 20, kneeY);                         // left knee
+    g.lineTo(cx - 22, hipY);                          // left hip
+    g.lineTo(cx - 19, shoulderY + 20);               // left waist
+    g.lineTo(cx - 21, H + 106);                       // left arm, inner
+    g.lineTo(cx - 31, H + 114);                       // left hand
+    g.lineTo(cx - 39, H + 104);                       // left arm, outer
+    g.lineTo(cx - 32, shoulderY);                     // left shoulder cap
+    g.lineTo(cx - 13, shoulderY - 3);                 // left shoulder, inner rise
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+
+    // head — a separate disc that just meets the neck base, so it never overlaps the body fill
+    g.fillStyle(t, 0.32);
+    g.fillCircle(cx, H, R);
+    g.lineStyle(1.5, t, 0.55);
+    g.strokeCircle(cx, H, R);
+
+    // quiet definition strokes (no fills, so no darkening): belt at the waist, a centre seam
+    g.lineStyle(2, t, 0.32);
+    g.beginPath(); g.moveTo(cx - 21, hipY); g.lineTo(cx + 21, hipY); g.strokePath();
+    g.lineStyle(1, t, 0.18);
+    g.beginPath(); g.moveTo(cx, H + 20); g.lineTo(cx, hipY - 3); g.strokePath();
     this.root.add(g);
   }
 
@@ -640,6 +673,9 @@ export class InventoryPanel {
 
     const cols = 5;
     const rows = Math.ceil(INVENTORY_SIZE / cols);
+    // centre the bag grid under the paper-doll (which is centred in PANEL_W)
+    const gridW = cols * (CELL + GAP) - GAP;
+    const gridLeft = off + Math.round((PANEL_W - gridW) / 2);
     const dollTop = 42;
     const equipBottom = dollTop + (DOLL_ROWS - 1) * ROWGAP + CELL + 18; // slot rows + label
     const gridTop = equipBottom + 24;
@@ -731,12 +767,12 @@ export class InventoryPanel {
     });
     // bag header
     this.root.add(
-      this.scene.add.text(off + 12, gridTop - 20, "BAG", { fontFamily: "monospace", fontSize: "12px", color: ARCANE.dim, fontStyle: "bold" })
+      this.scene.add.text(gridLeft, gridTop - 20, "BAG", { fontFamily: "monospace", fontSize: "12px", color: ARCANE.dim, fontStyle: "bold" })
     );
 
     // inventory grid
     for (let i = 0; i < INVENTORY_SIZE; i++) {
-      const x = off + 12 + (i % cols) * (CELL + GAP);
+      const x = gridLeft + (i % cols) * (CELL + GAP);
       const y = gridTop + Math.floor(i / cols) * (CELL + GAP);
       const item = this.loadout.inventory[i] ?? null;
       const isCharm = item?.slot === "charm";
@@ -787,7 +823,7 @@ export class InventoryPanel {
     // gear-bonus readout: collapsed by default (the full combat sheet also lives on [C])
     const caret = this.gearStatsOpen ? "▾" : "▸";
     const toggle = this.scene.add
-      .text(off + 12, derivedTop, `${caret} gear bonuses${lines.length ? ` (${lines.length})` : ""}`, {
+      .text(gridLeft, derivedTop, `${caret} gear bonuses${lines.length ? ` (${lines.length})` : ""}`, {
         fontFamily: "monospace", fontSize: "13px", color: "#8a9ab8", fontStyle: "bold",
       })
       .setInteractive({ useHandCursor: true });
@@ -799,7 +835,7 @@ export class InventoryPanel {
     if (this.gearStatsOpen) {
       if (lines.length === 0) {
         this.root.add(
-          this.scene.add.text(off + 12, derivedTop + 20, "nothing equipped", { fontFamily: "monospace", fontSize: "13px", color: "#4a4a56" })
+          this.scene.add.text(gridLeft, derivedTop + 20, "nothing equipped", { fontFamily: "monospace", fontSize: "13px", color: "#4a4a56" })
         );
       }
       // two columns so the readout stays compact
@@ -807,7 +843,7 @@ export class InventoryPanel {
       lines.forEach((line, i) => {
         const col = Math.floor(i / perCol);
         const rowI = i % perCol;
-        const lx = off + 12 + col * Math.round((PANEL_W - 20) / 2);
+        const lx = gridLeft + col * Math.round(gridW / 2);
         this.root.add(
           this.scene.add.text(lx, derivedTop + 20 + rowI * 16, line, { fontFamily: "monospace", fontSize: "12px", color: "#9fb09f" })
         );
@@ -1020,8 +1056,8 @@ export class CharacterPanel {
 // --- the skill tree: where builds are born ---
 
 const NODE = 46;
-const NODE_GAP = 10;
-const TREE_PAD = 26; // breathing room inside each tree column
+const NODE_GAP = 16;
+const TREE_PAD = 40; // breathing room inside each tree column
 
 export class SkillPanel {
   visible = false;
@@ -1225,8 +1261,8 @@ export class SkillPanel {
     const colW = maxPerRow * (NODE + NODE_GAP) - NODE_GAP + TREE_PAD;
     const W = Math.round(colW * trees.length + 24);
     this.panelW = W;
-    const top = 70;
-    const rowH = NODE + 40;
+    const top = 94;
+    const rowH = NODE + 58;
     this.panelH = top + maxTier * rowH + 10;
     panelChrome(this.scene, this.root, W, this.panelH, { accent: ARCANE.teal });
     this.root.setPosition(10, 50);
@@ -1273,7 +1309,7 @@ export class SkillPanel {
     trees.forEach((tree, ti) => {
       const cx = 12 + ti * colW;
       this.root.add(
-        this.scene.add.text(cx + colW / 2 - 6, 48, tree.toUpperCase(), {
+        this.scene.add.text(cx + colW / 2 - 6, 72, tree.toUpperCase(), {
           fontFamily: "monospace", fontSize: "12px", color: "#8a8a96", fontStyle: "bold",
         }).setOrigin(0.5, 0)
       );
