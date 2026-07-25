@@ -2,19 +2,60 @@ import http from "http";
 import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { DungeonRoom } from "./rooms/DungeonRoom";
-import { listProfiles, loadProfile, validKey } from "./persistence";
+import { listLadder, loadProfile, validKey, flushAll, ensureDataDir } from "./persistence";
 import { CURRENT_SEASON, RARITY_ORDER } from "@hollowmark/common";
 
 const port = Number(process.env.PORT || 2567);
+
+// The ladder cache is built from a single directory scan; do it at boot, before any
+// room exists, so no request ever pays for it.
+ensureDataDir();
+
+// A per-IP token bucket. These endpoints are wide open (Access-Control-Allow-Origin: *)
+// and share their event loop with every room's 20 Hz simulation, so an unthrottled
+// caller is a denial of service against live fights — cheap reads or not.
+const RATE_BURST = 30; // tokens a fresh caller may spend at once
+const RATE_REFILL_PER_SEC = 5;
+const buckets = new Map<string, { tokens: number; at: number }>();
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const b = buckets.get(ip) ?? { tokens: RATE_BURST, at: now };
+  b.tokens = Math.min(RATE_BURST, b.tokens + ((now - b.at) / 1000) * RATE_REFILL_PER_SEC);
+  b.at = now;
+  if (b.tokens < 1) {
+    buckets.set(ip, b);
+    return true;
+  }
+  b.tokens -= 1;
+  buckets.set(ip, b);
+  return false;
+}
+
+// buckets at full charge are indistinguishable from absent ones — drop them
+setInterval(() => {
+  const now = Date.now();
+  buckets.forEach((b, ip) => {
+    if (b.tokens + ((now - b.at) / 1000) * RATE_REFILL_PER_SEC >= RATE_BURST) buckets.delete(ip);
+  });
+}, 60_000).unref();
 
 // tiny HTTP layer: the lobby asks /rooms which games are open,
 // the hero-select screen asks /heroes who its keys belong to
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.url === "/health") {
-    // liveness probe for the host (Fly/Railway/Render/etc.) — cheap and dependency-free
+    // liveness probe for the host (Fly/Railway/Render/etc.) — cheap, dependency-free,
+    // and never rate limited: the platform must always be able to ask
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, season: CURRENT_SEASON }));
+    return;
+  }
+
+  const ip = String(req.headers["fly-client-ip"] ?? req.socket.remoteAddress ?? "unknown");
+  if (rateLimited(ip)) {
+    res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "1" });
+    res.end(JSON.stringify({ error: "slow down" }));
     return;
   }
   if (req.url?.startsWith("/heroes")) {
@@ -50,8 +91,10 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.url === "/legends") {
     // the Hall of Legends: the deepest heroes this server remembers — and its
     // most recent hardcore dead, honored regardless of how far they got
-    // only THIS season's heroes contend on the ladder (a reset bumps CURRENT_SEASON)
-    const all = listProfiles().filter((p) => p.name && (p.season ?? 1) === CURRENT_SEASON);
+    // only THIS season's heroes contend on the ladder (a reset bumps CURRENT_SEASON).
+    // Served from the in-memory ladder cache — this used to read every profile off
+    // the disk, synchronously, on the simulation's event loop.
+    const all = listLadder().filter((p) => p.name && (p.season ?? 1) === CURRENT_SEASON);
     // the endgame ladder: Rift Tier crowns it, then how far east / deep / high
     const ranked = [...all].sort(
       (a, b) =>
@@ -100,8 +143,46 @@ const httpServer = http.createServer(async (req, res) => {
 
 const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
+  // We drive shutdown ourselves (below). Colyseus's built-in handler was measured NOT
+  // to run its onShutdown callback under SIGTERM in this setup, and it calls
+  // process.exit() in a finally — so leaving it on would race our flush and win.
+  gracefullyShutdown: false,
 });
 gameServer.define("dungeon", DungeonRoom);
+
+// Saves are queued and written asynchronously (see WRITE-BEHIND in persistence.ts), so
+// the queue MUST be drained before the process goes away — otherwise a Fly machine
+// auto-stopping silently discards up to a flush interval of everyone's progress.
+//
+// Order matters: drain the rooms FIRST (that fires every onLeave, which queues each
+// hero's final save), and only then flush. Draining after the flush would leave those
+// last saves stranded in the queue.
+let shuttingDown = false;
+async function shutdown(reason: string, code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[server] ${reason} — draining rooms`);
+  try {
+    await gameServer.gracefullyShutdown(false); // false: don't exit, we still have work
+  } catch (err) {
+    console.error("[server] room drain failed:", err);
+  }
+  try {
+    await flushAll();
+    console.log("[server] persistence flushed; shutting down");
+  } catch (err) {
+    console.error("[server] final flush failed:", err);
+  }
+  process.exit(code);
+}
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => void shutdown(signal));
+}
+process.on("uncaughtException", (err) => {
+  console.error("[server] uncaught exception:", err);
+  void shutdown("uncaught exception", 1);
+});
 
 gameServer.listen(port).then(() => {
   console.log(`[server] listening on ws://localhost:${port} (lobby list at /rooms)`);

@@ -55,6 +55,89 @@ const DIR = process.env.ARPG_DATA_DIR || path.resolve(process.cwd(), "data", "pr
 const ACCOUNT_DIR = process.env.ARPG_ACCOUNT_DIR || path.resolve(path.dirname(DIR), "accounts");
 const KEY_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WRITE-BEHIND
+//
+// Saves used to be writeFileSync, on the same event loop as every room's 20 Hz
+// authoritative simulation — so every checkpoint (all players, every 10s) and every
+// equip/pickup/sale stalled combat for everyone in the process.
+//
+// Now a save lands in `pending` and a short timer flushes it asynchronously. Repeated
+// saves of the same key collapse into one write, which is the common case: a party of
+// four checkpointing together, or a player equipping a whole set in a few seconds.
+//
+// Two rules make this safe rather than merely fast:
+//   1. READS CONSULT `pending` FIRST. A hero who leaves and instantly rejoins must see
+//      what they just did, not whatever last reached the disk.
+//   2. flushAll() MUST run before the process exits. The Dockerfile leans on
+//      SIGTERM → Colyseus drain → onLeave persisting each hero, and Fly auto-stops
+//      machines; an unflushed queue at exit is silently lost progress. server/index.ts
+//      wires this into gameServer.onShutdown().
+// ─────────────────────────────────────────────────────────────────────────────
+
+// How long a save sits in the queue before it is written. Tunable so the durability
+// probe can hold the queue wide open and prove that ONLY the shutdown flush saves it.
+const FLUSH_DEBOUNCE_MS = Number(process.env.ARPG_FLUSH_DEBOUNCE_MS || 100);
+
+const pendingProfiles = new Map<string, Profile>();
+const pendingAccounts = new Map<string, Account>();
+let flushTimer: NodeJS.Timeout | null = null;
+let flushing: Promise<void> | null = null;
+
+/** tmp + rename, so a crash mid-write can never leave a torn profile on disk. */
+async function writeAtomic(file: string, data: string) {
+  const tmp = `${file}.tmp`;
+  await fs.promises.writeFile(tmp, data);
+  await fs.promises.rename(tmp, file);
+}
+
+async function flushOnce() {
+  const profiles = [...pendingProfiles];
+  const accounts = [...pendingAccounts];
+  pendingProfiles.clear();
+  pendingAccounts.clear();
+  if (profiles.length) await fs.promises.mkdir(DIR, { recursive: true });
+  if (accounts.length) await fs.promises.mkdir(ACCOUNT_DIR, { recursive: true });
+  await Promise.all([
+    ...profiles.map(([key, prof]) =>
+      writeAtomic(path.join(DIR, `${key}.json`), JSON.stringify(prof)).catch((err) =>
+        console.error(`[persistence] failed to save ${key}:`, err)
+      )
+    ),
+    ...accounts.map(([key, acc]) =>
+      writeAtomic(path.join(ACCOUNT_DIR, `${key}.json`), JSON.stringify(acc)).catch((err) =>
+        console.error(`[persistence] failed to save account ${key}:`, err)
+      )
+    ),
+  ]);
+}
+
+function scheduleFlush() {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    flushing = flushOnce().finally(() => {
+      flushing = null;
+    });
+  }, FLUSH_DEBOUNCE_MS);
+  flushTimer.unref?.(); // a queued save must never hold the process open on its own
+}
+
+/**
+ * Drain every queued write. Call before exit — and await it.
+ * Loops because a flush in flight can be racing saves that land while it runs.
+ */
+export async function flushAll(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  while (flushing || pendingProfiles.size || pendingAccounts.size) {
+    if (flushing) await flushing;
+    if (pendingProfiles.size || pendingAccounts.size) await flushOnce();
+  }
+}
+
 // an ACCOUNT spans all of a player's heroes — its shared stash and Codex are the
 // cross-character meta. Kept in its OWN file (never inside a hero profile) so items
 // are never double-stored and the Codex is shared by every hero the account owns.
@@ -69,6 +152,8 @@ export interface Account {
 }
 export function loadAccount(key: string): Account {
   if (!KEY_RE.test(key)) return {};
+  const queued = pendingAccounts.get(key);
+  if (queued) return structuredClone(queued); // newer than the file; cloned — see loadProfile
   try {
     return JSON.parse(fs.readFileSync(path.join(ACCOUNT_DIR, `${key}.json`), "utf8")) as Account;
   } catch {
@@ -76,19 +161,13 @@ export function loadAccount(key: string): Account {
   }
 }
 // Partial-merge save: only the fields present in `patch` are overwritten, so a
-// stash-only save never clobbers the Codex (and vice-versa). Read-modify-write.
+// stash-only save never clobbers the Codex (and vice-versa). Read-modify-write —
+// and because loadAccount reads the queue first, merging still composes correctly
+// when several patches land before the flush.
 export function saveAccount(key: string, patch: Account) {
   if (!KEY_RE.test(key)) return;
-  try {
-    fs.mkdirSync(ACCOUNT_DIR, { recursive: true });
-    const merged = { ...loadAccount(key), ...patch };
-    const file = path.join(ACCOUNT_DIR, `${key}.json`);
-    const tmp = `${file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(merged));
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    console.error(`[persistence] failed to save account ${key}:`, err);
-  }
+  pendingAccounts.set(key, { ...loadAccount(key), ...patch });
+  scheduleFlush();
 }
 
 // --- the Great Renaming ---
@@ -230,8 +309,85 @@ function migrateProfile(prof: Profile): Profile {
   return prof;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE LADDER CACHE
+//
+// /legends used to readdirSync + readFileSync + migrate EVERY profile on disk, per
+// request, synchronously — on the event loop running every room's simulation. One
+// person opening the lobby stuttered every live fight, and with `Access-Control-
+// Allow-Origin: *` a curl loop was a denial of service.
+//
+// Now it's a Map, scanned once at boot and kept current by saveProfile. A ladder row
+// is a dozen scalars — the gear and inventory that make a profile big are not kept.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LadderEntry {
+  name: string;
+  cls: string;
+  level: number;
+  deepestFloor: number;
+  actsUnlocked: number;
+  diffUnlocked: number;
+  abyssDeepest: number;
+  riftTier: number;
+  season: number;
+  hardcore: boolean;
+  dead: boolean;
+  diedTo: string;
+  diedFloor: number;
+  diedAct: number;
+  diedAt: number;
+}
+
+const ladder = new Map<string, LadderEntry>();
+
+function ladderEntryOf(prof: Profile): LadderEntry {
+  return {
+    name: prof.name ?? "",
+    cls: prof.cls,
+    level: prof.level,
+    deepestFloor: prof.deepestFloor ?? 1,
+    actsUnlocked: prof.actsUnlocked ?? 1,
+    diffUnlocked: prof.diffUnlocked ?? 1,
+    abyssDeepest: prof.abyssDeepest ?? 0,
+    riftTier: prof.riftTier ?? 0,
+    season: prof.season ?? 1,
+    hardcore: !!prof.hardcore,
+    dead: !!prof.dead,
+    diedTo: prof.diedTo ?? "",
+    diedFloor: prof.diedFloor ?? 0,
+    diedAct: prof.diedAct ?? 0,
+    diedAt: prof.diedAt ?? 0,
+  };
+}
+
+/** The one full scan of the profile directory — at boot, before anyone is playing. */
+function seedLadder(limit = 5000) {
+  ladder.clear();
+  let files: string[];
+  try {
+    files = fs.readdirSync(DIR).filter((f) => f.endsWith(".json"));
+  } catch {
+    return; // no profiles yet
+  }
+  for (const f of files.slice(0, limit)) {
+    try {
+      const prof = migrateProfile(JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")) as Profile);
+      if (typeof prof.level === "number") ladder.set(f.slice(0, -5), ladderEntryOf(prof));
+    } catch {
+      /* unreadable profile — skip it, it just doesn't appear on the ladder */
+    }
+  }
+}
+
+/** Every hero this server remembers — served from memory, never off the disk. */
+export function listLadder(): LadderEntry[] {
+  return [...ladder.values()];
+}
+
 export function ensureDataDir() {
   fs.mkdirSync(DIR, { recursive: true });
+  if (ladder.size === 0) seedLadder();
 }
 
 export function validKey(key: unknown): key is string {
@@ -240,6 +396,12 @@ export function validKey(key: unknown): key is string {
 
 export function loadProfile(key: string): Profile | null {
   if (!validKey(key)) return null;
+  // A queued write is newer than the file — see WRITE-BEHIND. Cloned, because the
+  // queued profile still points at the live Player's gear/inventory arrays: handing
+  // those out would let a rejoining hero share array objects with the one still in
+  // the room. Reads returned a fresh object before this change; they still do.
+  const queued = pendingProfiles.get(key);
+  if (queued) return structuredClone(queued);
   try {
     const raw = fs.readFileSync(path.join(DIR, `${key}.json`), "utf8");
     const prof = JSON.parse(raw) as Profile;
@@ -250,34 +412,9 @@ export function loadProfile(key: string): Profile | null {
   }
 }
 
-// every hero this server has ever known — the raw material of the Hall of Legends
-export function listProfiles(limit = 500): Profile[] {
-  try {
-    return fs
-      .readdirSync(DIR)
-      .filter((f) => f.endsWith(".json"))
-      .slice(0, limit)
-      .map((f) => {
-        try {
-          return migrateProfile(JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")) as Profile);
-        } catch {
-          return null;
-        }
-      })
-      .filter((p): p is Profile => !!p && typeof p.level === "number");
-  } catch {
-    return [];
-  }
-}
-
 export function saveProfile(key: string, prof: Profile) {
   if (!validKey(key)) return;
-  try {
-    const file = path.join(DIR, `${key}.json`);
-    const tmp = `${file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(prof));
-    fs.renameSync(tmp, file); // atomic-ish: no torn profiles on crash
-  } catch (err) {
-    console.error(`[persistence] failed to save ${key}:`, err);
-  }
+  pendingProfiles.set(key, prof);
+  ladder.set(key, ladderEntryOf(prof)); // the Hall of Legends is current immediately
+  scheduleFlush();
 }

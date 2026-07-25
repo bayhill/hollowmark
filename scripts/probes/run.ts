@@ -53,6 +53,9 @@ const PROBES: Probe[] = [
   { name: "story-probe", file: "live/story-probe.ts", live: true },
   { name: "codex-rt-probe", file: "live/codex-rt-probe.ts", live: true },
   { name: "hc-probe", file: "live/hc-probe.ts", live: true },
+
+  // owns its server: SIGTERMs it and reads what actually landed on disk
+  { name: "durability-probe", file: "durability-probe.ts", live: false, ownServer: true },
 ];
 
 const SMOKE: Probe = { name: "smoke", file: "../smoke.ts", live: true };
