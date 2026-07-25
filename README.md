@@ -4,7 +4,7 @@ Browser-based multiplayer isometric ARPG in the tradition of the late-90s greats
 
 ## Stack
 
-- `common/` — shared TypeScript: map data, constants, collision, item logic (later). Imported as source by both sides.
+- `common/` — shared TypeScript: map data, constants, collision, item logic. Imported as source by both sides. `index.ts` is the single entry point and re-exports everything, so all imports are just `from "@hollowmark/common"`; behind it sit `stats.ts`, `bosses.ts`, `skills.ts`, `effects.ts`, `mercs.ts`, `quests.ts` and `lore.ts`. Those modules depend only on types and on each other one-way — never back on `index.ts` at runtime — because the data tables initialise at import time and a cycle would throw before the server ever starts.
 - `server/` — Node + [Colyseus](https://colyseus.io). Authoritative simulation at 20 Hz, room `dungeon`, port 2567.
 - `client/` — [Phaser 3](https://phaser.io) + Vite. Isometric projection of the server's flat 2D world, entity interpolation, click-to-move.
 
