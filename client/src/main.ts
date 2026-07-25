@@ -3,8 +3,14 @@ import { GameScene } from "./GameScene";
 import { UIScene } from "./UIScene";
 import { SERVER_HTTP } from "./config";
 import { sfx } from "./sfx";
-import { heroPortrait, HeroLook } from "./heroPreview";
+import { heroPortrait, createHeroStage, HeroLook, HeroStage } from "./heroPreview";
 import { arcaneOverlay, arcaneHeader, arcanePanel, arcaneButton } from "./arcaneDom";
+import {
+  ATTRS, ATTR_LABELS, CLASS_ATTACKS, CLASS_BASE_ATTRS, CLASS_OFFENSIVE_ATTR,
+  BASE_ITEMS, RARITY_ORDER, RARITY_COLORS, SKILL_TREES, type ClassName,
+} from "@hollowmark/common";
+
+const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 
 // a portrait <img> that fills in once the offscreen renderer has drawn the hero
 function portraitImg(look: HeroLook, size: number): HTMLImageElement {
@@ -46,60 +52,145 @@ function armAudioUnlock() {
 // --- character creation: shown once, before the descent begins ---
 
 interface ClassCard {
-  cls: string;
+  cls: ClassName;
   title: string;
+  epithet: string;
   blurb: string;
 }
 
 const CLASS_CARDS: ClassCard[] = [
-  { cls: "barbarian", title: "Barbarian", blurb: "A mountain of muscle and fury. Crushes skulls at arm's length and roars hard enough to stagger the dead." },
-  { cls: "rogue", title: "Rogue", blurb: "A sister of the Sightless Eye. Kills from a distance, dances out of reach, and never misses twice." },
-  { cls: "sorcerer", title: "Sorcerer", blurb: "A wielder of the elements. Fragile as parchment, catastrophic as a storm. The floor tends to catch fire." },
-  { cls: "paladin", title: "Paladin", blurb: "Faith with a shield attached. Smites, zeals, hurls blessed hammers — and mends the whole party's wounds." },
-  { cls: "necromancer", title: "Necromancer", blurb: "Why fight alone? Raises skeletons from the floor, curses flesh to weakness, and breathes poison over rooms." },
-  { cls: "druid", title: "Druid", blurb: "Storm and fang. Calls firestorms, volcanoes, and hurricanes — or drops the pretense and becomes the wolf." },
+  { cls: "barbarian", title: "Barbarian", epithet: "of the Highland Clans", blurb: "A mountain of muscle and fury. Crushes skulls at arm's length and roars hard enough to stagger the dead." },
+  { cls: "rogue", title: "Rogue", epithet: "sister of the Sightless Eye", blurb: "A sister of the Sightless Eye. Kills from a distance, dances out of reach, and never misses twice." },
+  { cls: "sorcerer", title: "Sorcerer", epithet: "of the Vizjerei spires", blurb: "A wielder of the elements. Fragile as parchment, catastrophic as a storm. The floor tends to catch fire." },
+  { cls: "paladin", title: "Paladin", epithet: "sworn to the Silver Light", blurb: "Faith with a shield attached. Smites, zeals, hurls blessed hammers — and mends the whole party's wounds." },
+  { cls: "necromancer", title: "Necromancer", epithet: "of the Priests of Rathma", blurb: "Why fight alone? Raises skeletons from the floor, curses flesh to weakness, and breathes poison over rooms." },
+  { cls: "druid", title: "Druid", epithet: "of the Scosglen wilds", blurb: "Storm and fang. Calls firestorms, volcanoes, and hurricanes — or drops the pretense and becomes the wolf." },
 ];
+
+// --- shared furniture for the two "who descends" screens ---
+
+// The centrepiece: a live hero standing on a lit dais, with a nameplate beneath.
+// The caller owns the returned stage and MUST destroy() it when the screen closes.
+function heroStagePanel(title: string): {
+  panel: HTMLDivElement; stage: HeroStage; nameEl: HTMLDivElement; subEl: HTMLDivElement;
+} {
+  const panel = arcanePanel({ title });
+  panel.style.cssText += "display:flex;flex-direction:column;align-items:center;width:336px;flex:0 0 auto;";
+
+  const mount = document.createElement("div");
+  mount.style.cssText = "margin:4px 0 0;";
+  panel.appendChild(mount);
+  const stage = createHeroStage(mount, { width: 300, height: 400 });
+
+  const nameEl = document.createElement("div");
+  nameEl.style.cssText = "font-size:22px;font-weight:bold;letter-spacing:4px;color:#cfc6d6;text-align:center;margin-top:10px;min-height:26px;text-shadow:0 0 18px rgba(154,147,162,0.35);";
+  const subEl = document.createElement("div");
+  subEl.style.cssText = "font-size:11px;color:#8a8494;font-style:italic;letter-spacing:1px;text-align:center;margin-top:5px;min-height:15px;";
+  const hint = document.createElement("div");
+  hint.textContent = "⟲  drag the hero to turn";
+  hint.style.cssText = "font-size:9px;color:#5f5866;letter-spacing:2px;margin-top:12px;";
+  panel.append(nameEl, subEl, hint);
+  return { panel, stage, nameEl, subEl };
+}
+
+// One selectable row: thumbnail, a bright title line, a dim detail line. Selection state
+// is driven by the caller through the returned setter, so both screens highlight alike.
+function pickRow(look: HeroLook, title: string, sub: string, color: string, thumb = 40): {
+  el: HTMLDivElement; setSelected: (on: boolean) => void;
+} {
+  const el = document.createElement("div");
+  el.style.cssText = `
+    display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:3px;cursor:pointer;user-select:none;
+    background:linear-gradient(180deg,#161220,#100d18);border:1px solid rgba(95,88,102,0.5);transition:all .15s;
+  `;
+  el.appendChild(portraitImg(look, thumb));
+  const text = document.createElement("div");
+  text.style.cssText = "min-width:0;flex:1;";
+  text.innerHTML = `<div style="font-size:13px;font-weight:bold;letter-spacing:1px;color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${title}</div>
+    <div style="font-size:10px;color:#8a8494;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</div>`;
+  el.appendChild(text);
+
+  let selected = false;
+  const paint = () => {
+    el.style.borderColor = selected ? "rgba(207,198,214,0.9)" : "rgba(95,88,102,0.5)";
+    el.style.boxShadow = selected ? "0 0 18px rgba(154,147,162,0.2), inset 0 0 14px rgba(154,147,162,0.06)" : "none";
+    el.style.background = selected ? "linear-gradient(180deg,#221c30,#151120)" : "linear-gradient(180deg,#161220,#100d18)";
+  };
+  el.onmouseenter = () => { if (!selected) el.style.borderColor = "rgba(154,147,162,0.6)"; };
+  el.onmouseleave = paint;
+  paint();
+  return { el, setSelected: (on) => { selected = on; paint(); } };
+}
+
+// A labelled stat bar — the attribute readout on the forge screen.
+function statBar(label: string, value: number, max: number, color: string): HTMLDivElement {
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:6px;";
+  const name = document.createElement("span");
+  name.textContent = label;
+  name.style.cssText = "font-size:10px;color:#8a8494;letter-spacing:1px;width:66px;";
+  const track = document.createElement("div");
+  track.style.cssText = "flex:1;height:6px;background:#0c0a12;border:1px solid rgba(95,88,102,0.5);border-radius:2px;overflow:hidden;";
+  const fill = document.createElement("div");
+  fill.style.cssText = `height:100%;width:${Math.round((value / max) * 100)}%;background:${color};opacity:.85;`;
+  track.appendChild(fill);
+  const num = document.createElement("span");
+  num.textContent = String(value);
+  num.style.cssText = `font-size:11px;color:${color};width:20px;text-align:right;`;
+  row.append(name, track, num);
+  return row;
+}
 
 function showCreationScreen(): Promise<{ cls: string; name: string; hardcore: boolean }> {
   return new Promise((resolve) => {
     const overlay = arcaneOverlay();
+    const header = arcaneHeader("THE FORGE OF HEROES", "— stay awhile and listen · choose who descends —");
 
-    let chosen = "";
-    const cards = new Map<string, HTMLDivElement>();
+    // three columns: who you could be · who you are · what that means
+    const { panel: stagePanel, stage, nameEl, subEl } = heroStagePanel("THE VESSEL");
 
-    const header = arcaneHeader("HOLLOWMARK", "— stay awhile and listen · choose who descends —");
+    const listPanel = arcanePanel({ title: "BLOODLINES" });
+    listPanel.style.cssText += "display:flex;flex-direction:column;gap:7px;width:250px;align-self:stretch;flex:0 0 auto;";
 
-    const panel = arcanePanel({ title: "THE FORGE OF HEROES" });
-    panel.style.cssText += "display:flex;flex-direction:column;align-items:center;max-width:720px;";
+    const detail = arcanePanel({ title: "THE CALLING" });
+    detail.style.cssText += "display:flex;flex-direction:column;width:300px;align-self:stretch;flex:0 0 auto;";
 
-    const row = document.createElement("div");
-    row.style.cssText = "display: flex; gap: 16px; margin: 6px 0 26px; flex-wrap: wrap; justify-content: center;";
+    const blurb = document.createElement("div");
+    blurb.style.cssText = "font-size:11.5px;line-height:1.6;color:#8a8494;min-height:74px;margin-top:4px;";
+    const attrsWrap = document.createElement("div");
+    attrsWrap.style.cssText = "margin:14px 0 4px;";
+    const attackLine = document.createElement("div");
+    attackLine.style.cssText = "font-size:10px;color:#6a6474;letter-spacing:1px;margin-bottom:14px;min-height:14px;";
+    const pathsLine = document.createElement("div");
+    pathsLine.style.cssText = "font-size:10px;letter-spacing:2px;color:#5f5866;border-bottom:1px solid rgba(95,88,102,0.4);padding-bottom:5px;margin-bottom:8px;";
+    const skillsWrap = document.createElement("div");
+    skillsWrap.style.cssText = "margin-bottom:16px;";
 
     const nameRow = document.createElement("div");
-    nameRow.style.cssText = "display: flex; gap: 12px; align-items: center; margin-bottom: 20px;";
+    nameRow.style.cssText = "display:flex;gap:10px;align-items:center;margin-bottom:14px;";
     const nameLabel = document.createElement("span");
     nameLabel.textContent = "name:";
-    nameLabel.style.cssText = "font-size: 13px; color: #8a8494; letter-spacing: 1px;";
+    nameLabel.style.cssText = "font-size:12px;color:#8a8494;letter-spacing:1px;";
     const nameInput = document.createElement("input");
     nameInput.className = "arc-input";
     nameInput.maxLength = 12;
     nameInput.placeholder = "Pilgrim";
-    nameInput.style.width = "190px";
+    nameInput.style.cssText += "flex:1;min-width:0;font-size:14px;";
     nameRow.append(nameLabel, nameInput);
 
     // the vow: one life, no second chances — crimson is a meaning the chrome allows through
     let hardcore = false;
     const hcRow = document.createElement("div");
     hcRow.style.cssText = `
-      display: flex; gap: 10px; align-items: center; margin-bottom: 24px; cursor: pointer; user-select: none;
-      border: 1px solid #3a2028; border-radius: 3px; padding: 9px 16px; background: #140c10; transition: all .15s;
+      display: flex; gap: 10px; align-items: center; margin-bottom: 16px; cursor: pointer; user-select: none;
+      border: 1px solid #3a2028; border-radius: 3px; padding: 9px 12px; background: #140c10; transition: all .15s;
     `;
     const hcMark = document.createElement("span");
     hcMark.textContent = "☠";
     hcMark.style.cssText = "font-size: 16px; color: #5a3a42;";
     const hcText = document.createElement("span");
     hcText.textContent = "HARDCORE — one life. Death is forever.";
-    hcText.style.cssText = "font-size: 12px; color: #8a6a70; letter-spacing: 1px;";
+    hcText.style.cssText = "font-size: 11px; color: #8a6a70; letter-spacing: 1px; line-height:1.4;";
     hcRow.append(hcMark, hcText);
     hcRow.onclick = () => {
       hardcore = !hardcore;
@@ -113,47 +204,57 @@ function showCreationScreen(): Promise<{ cls: string; name: string; hardcore: bo
     };
 
     const button = arcaneButton("ENTER THE DUNGEON", "primary");
-    button.disabled = true;
-    button.style.fontSize = "15px";
-    button.style.padding = "12px 34px";
+    button.style.cssText += "font-size:14px;padding:12px 20px;margin-top:auto;";
+
+    // the class list, and the selection that drives the stage and the calling
+    const rows = new Map<string, { setSelected: (on: boolean) => void }>();
+    let chosen: ClassName = CLASS_CARDS[0].cls;
+
+    const select = (card: ClassCard) => {
+      chosen = card.cls;
+      rows.forEach((r, cls) => r.setSelected(cls === card.cls));
+      const color = CLASS_COLORS[card.cls] ?? "#cfc6d6";
+      stage.setLook({ cls: card.cls });
+      nameEl.textContent = card.title.toUpperCase();
+      nameEl.style.color = color;
+      subEl.textContent = card.epithet;
+      blurb.textContent = card.blurb;
+
+      const attrs = CLASS_BASE_ATTRS[card.cls];
+      const signature = CLASS_OFFENSIVE_ATTR[card.cls];
+      attrsWrap.innerHTML = "";
+      for (const a of ATTRS)
+        attrsWrap.appendChild(statBar(ATTR_LABELS[a], attrs[a], 40, a === signature ? color : "#6a6474"));
+
+      const atk = CLASS_ATTACKS[card.cls];
+      attackLine.textContent = atk.type === "melee"
+        ? `melee · ${atk.dmg[0]}–${atk.dmg[1]} damage · ${atk.arcDeg}° arc`
+        : `${atk.kind} · ${atk.dmg[0]}–${atk.dmg[1]} damage · at range`;
+
+      // the three paths this class can walk, and the first skills off them
+      const tree = SKILL_TREES[card.cls] ?? [];
+      const paths = [...new Set(tree.map((n) => n.tree))];
+      pathsLine.textContent = paths.join("  ·  ").toUpperCase();
+      skillsWrap.innerHTML = "";
+      for (const node of tree.filter((n) => n.tier === 1 && n.type === "active").slice(0, 3)) {
+        const s = document.createElement("div");
+        s.style.cssText = "font-size:10.5px;line-height:1.45;margin-bottom:5px;";
+        s.innerHTML = `<span style="color:${color};">${node.name}</span> <span style="color:#6a6474;">— ${node.desc.toLowerCase()}</span>`;
+        skillsWrap.appendChild(s);
+      }
+    };
 
     for (const card of CLASS_CARDS) {
-      const clsColor = CLASS_COLORS[card.cls] ?? "#cfc6d6";
-      const el = document.createElement("div");
-      el.style.cssText = `
-        width: 210px; padding: 16px 15px; cursor: pointer; user-select: none; border-radius: 4px;
-        background: linear-gradient(180deg,#161220,#100d18); border: 1px solid rgba(95,88,102,0.5); transition: all .15s;
-      `;
-      // a living preview of the class, drawn as the in-game hero would look unarmoured
-      const portraitWrap = document.createElement("div");
-      portraitWrap.style.cssText = "display:flex;justify-content:center;margin-bottom:8px;";
-      portraitWrap.appendChild(portraitImg({ cls: card.cls }, 78));
-      const title = document.createElement("div");
-      title.textContent = card.title.toUpperCase();
-      title.style.cssText = `font-size: 16px; font-weight: bold; letter-spacing: 2px; color: ${clsColor}; margin-bottom: 9px; text-align: center;`;
-      const blurb = document.createElement("div");
-      blurb.textContent = card.blurb;
-      blurb.style.cssText = "font-size: 11px; line-height: 1.55; color: #8a8494;";
-      el.append(portraitWrap, title, blurb);
-      el.onmouseenter = () => { if (chosen !== card.cls) el.style.borderColor = "rgba(154,147,162,0.6)"; };
-      el.onmouseleave = () => { if (chosen !== card.cls) el.style.borderColor = "rgba(95,88,102,0.5)"; };
-      el.onclick = () => {
-        chosen = card.cls;
-        cards.forEach((c, cls) => {
-          const sel = cls === chosen;
-          c.style.borderColor = sel ? "rgba(207,198,214,0.9)" : "rgba(95,88,102,0.5)";
-          c.style.boxShadow = sel ? "0 0 22px rgba(154,147,162,0.22)" : "none";
-        });
-        if (button.disabled) button.disabled = false;
-        nameInput.focus();
-      };
-      cards.set(card.cls, el);
-      row.appendChild(el);
+      const color = CLASS_COLORS[card.cls] ?? "#cfc6d6";
+      const row = pickRow({ cls: card.cls }, card.title.toUpperCase(), card.epithet, color, 38);
+      row.el.onclick = () => { select(card); nameInput.focus(); };
+      rows.set(card.cls, row);
+      listPanel.appendChild(row.el);
     }
 
     const submit = () => {
-      if (!chosen) return;
       resolve({ cls: chosen, name: nameInput.value.trim() || "Pilgrim", hardcore });
+      stage.destroy();
       overlay.remove();
     };
     button.onclick = submit;
@@ -162,9 +263,15 @@ function showCreationScreen(): Promise<{ cls: string; name: string; hardcore: bo
       e.stopPropagation(); // don't leak keys into the (future) game
     };
 
-    panel.append(row, nameRow, hcRow, button);
-    overlay.append(header, panel);
+    detail.append(blurb, attrsWrap, attackLine, pathsLine, skillsWrap, nameRow, hcRow, button);
+
+    const columns = document.createElement("div");
+    columns.style.cssText = "display:flex;gap:22px;align-items:stretch;justify-content:center;flex-wrap:wrap;";
+    columns.append(listPanel, stagePanel, detail);
+    overlay.append(header, columns);
     document.body.appendChild(overlay);
+
+    select(CLASS_CARDS[0]); // nobody should meet an empty dais
   });
 }
 
@@ -366,20 +473,35 @@ function showHeroSelect(
     }
 
     const overlay = arcaneOverlay();
+    const { panel: stagePanel, stage, nameEl, subEl } = heroStagePanel("THE CHOSEN");
     const finish = (result: { key: string; isNew?: { cls: string; name: string; hardcore?: boolean }; randomize?: boolean }) => {
+      stage.destroy();
       overlay.remove();
       resolve(result);
     };
 
     const header = arcaneHeader("CHOOSE YOUR HERO", "— every soul this browser has forged —");
-    const panel = arcanePanel({ title: "THE ROSTER" });
-    panel.style.cssText += "display:flex;flex-direction:column;align-items:center;width:460px;";
+
+    const listPanel = arcanePanel({ title: "THE ROSTER" });
+    listPanel.style.cssText += "display:flex;flex-direction:column;width:290px;align-self:stretch;flex:0 0 auto;";
 
     const list = document.createElement("div");
     list.className = "arc-scroll";
-    list.style.cssText = "width: 100%; max-height: 300px; overflow-y: auto; margin: 4px 0 18px; display: flex; flex-direction: column; gap: 8px;";
+    list.style.cssText = "width:100%;max-height:352px;overflow-y:auto;margin:4px 0 16px;display:flex;flex-direction:column;gap:7px;padding-right:3px;";
 
-    // live details from the server (level, class, depth)
+    const detail = arcanePanel({ title: "THE RECKONING" });
+    detail.style.cssText += "display:flex;flex-direction:column;width:300px;align-self:stretch;flex:0 0 auto;";
+    const progress = document.createElement("div");
+    progress.style.cssText = "margin-top:4px;";
+    const gearTitle = document.createElement("div");
+    gearTitle.textContent = "WORN INTO THE DARK";
+    gearTitle.style.cssText = "font-size:10px;letter-spacing:2px;color:#5f5866;margin:18px 0 8px;border-bottom:1px solid rgba(95,88,102,0.4);padding-bottom:5px;";
+    const gearList = document.createElement("div");
+    const enterBtn = arcaneButton("ENTER THE DUNGEON", "primary");
+    enterBtn.style.cssText += "font-size:14px;padding:12px 20px;margin-top:auto;";
+    detail.append(progress, gearTitle, gearList, enterBtn);
+
+    // live details from the server (level, class, depth, the gear they're standing in)
     let details: any[] = [];
     if (roster.length) {
       try {
@@ -388,53 +510,105 @@ function showHeroSelect(
       } catch { /* offline — local names only */ }
     }
 
+    const actWord = (a: number) => (a >= 5 ? "the Abyss" : `Act ${["I", "II", "III", "IV"][Math.max(0, Math.min(3, (a || 1) - 1))]}`);
+    const line = (label: string, value: string, color = "#cfc6d6") => {
+      const r = document.createElement("div");
+      r.style.cssText = "display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(95,88,102,0.28);";
+      r.innerHTML = `<span style="color:#6a6474;letter-spacing:1px;">${label}</span><span style="color:${color};text-align:right;">${value}</span>`;
+      return r;
+    };
+
+    const rows = new Map<string, { setSelected: (on: boolean) => void }>();
+    let chosenKey = "";
+
+    const select = (entry: RosterEntry) => {
+      chosenKey = entry.key;
+      rows.forEach((r, k) => r.setSelected(k === entry.key));
+      const d = details.find((x) => x.key === entry.key);
+      const name = d?.name || entry.name || "Unnamed";
+      const cls = d?.cls || entry.cls || "?";
+      const dead = !!d?.dead;
+      const hc = !!d?.hardcore;
+      const color = dead ? "#7a5a60" : CLASS_COLORS[cls] ?? "#cfc6d6";
+
+      // the hero exactly as they look in the dungeon — their gear if the server knows it
+      const look: HeroLook = d?.appearance?.cls ? d.appearance : { cls };
+      stage.setLook(look);
+      stage.el.style.filter = dead ? "grayscale(0.85) brightness(0.62)" : "none";
+      nameEl.textContent = `${hc ? "☠ " : ""}${name}`;
+      nameEl.style.color = color;
+      subEl.textContent = dead
+        ? `✝ fell forever${d.diedAct ? ` in ${actWord(d.diedAct)}` : ""}${d.diedTo ? ` — slain by ${d.diedTo}` : ""}`
+        : d && d.level > 0
+          ? `level ${d.level} ${cls}${hc ? " · sworn to one life" : ""}`
+          : `${cls} — has not yet descended`;
+
+      progress.innerHTML = "";
+      progress.appendChild(line("CLASS", cls.charAt(0).toUpperCase() + cls.slice(1), color));
+      progress.appendChild(line("LEVEL", d?.level ? String(d.level) : "—"));
+      progress.appendChild(line("REACHED", d ? actWord(d.actsUnlocked ?? 1) : "—"));
+      if ((d?.diffUnlocked ?? 1) > 1)
+        progress.appendChild(line("EARNED", `${["", "", "Nightmare", "Hell"][d.diffUnlocked]}`, "#c9a04a"));
+      if ((d?.abyssDeepest ?? 0) > 0) progress.appendChild(line("ABYSS", `depth ${d.abyssDeepest}`, "#b048d8"));
+      if (dead) progress.appendChild(line("STATE", "at rest", "#c0504a"));
+      else if (hc) progress.appendChild(line("VOW", "hardcore", "#e88a96"));
+
+      // what they're wearing, slot by slot — the "all the visuals" made legible
+      const SLOTS: Array<[keyof HeroLook, string]> = [
+        ["weaponBase", "weapon"], ["offhandBase", "offhand"], ["helmBase", "helm"],
+        ["chestBase", "chest"], ["beltBase", "belt"], ["bootsBase", "boots"],
+      ];
+      gearList.innerHTML = "";
+      let anyGear = false;
+      for (const [field, label] of SLOTS) {
+        const base = look[field] as string | undefined;
+        if (base) anyGear = true;
+        const shown = base ? BASE_ITEMS[base]?.name ?? base : "—";
+        gearList.appendChild(line(label.toUpperCase(), shown, base ? "#cfc6d6" : "#4a4552"));
+      }
+      const tier = look.gearTier ?? 0;
+      if (tier > 0) {
+        const rarity = RARITY_ORDER[tier];
+        gearList.appendChild(line("FINEST", rarity, hex(RARITY_COLORS[rarity] ?? 0xcfc6d6)));
+      } else if (!anyGear) {
+        const bare = document.createElement("div");
+        bare.textContent = "unequipped — the dungeon will provide";
+        bare.style.cssText = "font-size:10px;color:#5f5866;font-style:italic;margin-top:8px;";
+        gearList.appendChild(bare);
+      }
+
+      enterBtn.disabled = dead;
+      enterBtn.textContent = dead ? "AT REST" : "ENTER THE DUNGEON";
+    };
+
     for (const entry of roster) {
       const d = details.find((x) => x.key === entry.key);
       const name = d?.name || entry.name || "Unnamed";
       const cls = d?.cls || entry.cls || "?";
       const dead = !!d?.dead;
       const hc = !!d?.hardcore;
-      const actWord = (a: number) => (a >= 5 ? "the Abyss" : `Act ${["I", "II", "III", "IV"][Math.max(0, Math.min(3, (a || 1) - 1))]}`);
       const sub = dead
-        ? `✝ fell forever${d.diedAct ? ` in ${actWord(d.diedAct)}` : ""}${d.diedTo ? ` — slain by ${d.diedTo}` : ""}`
+        ? `✝ fell in ${d.diedAct ? actWord(d.diedAct) : "the dark"}`
         : d && d.level > 0
-          ? `${hc ? "☠ hardcore · " : ""}level ${d.level} ${cls} · ${actWord(d.actsUnlocked ?? 1)}${(d.diffUnlocked ?? 1) > 1 ? ` · ${["", "", "Nightmare", "Hell"][d.diffUnlocked]} earned` : ""}${(d.abyssDeepest ?? 0) > 0 ? ` · abyss ${d.abyssDeepest}` : ""}`
-          : `${hc ? "☠ hardcore · " : ""}${cls} — has not yet descended`;
-      const row = document.createElement("div");
-      row.className = "arc-row";
-      if (dead) { row.style.opacity = ".62"; row.style.borderColor = "rgba(74,32,40,0.7)"; }
-      else if (hc) { row.style.borderColor = "rgba(74,32,40,0.8)"; }
-      const info = document.createElement("div");
-      info.innerHTML = `<div style="font-size:14px;font-weight:bold;color:${dead ? "#6a5a5e" : CLASS_COLORS[cls] ?? "#cfc6d6"};">${hc ? "☠ " : ""}${name}</div>
-        <div style="font-size:10px;color:${dead ? "#7a5a60" : "#8a8494"};">${sub}</div>`;
-      // the hero exactly as they look in the dungeon — their gear if the server knows it, else the bare class
+          ? `level ${d.level} ${cls} · ${actWord(d.actsUnlocked ?? 1)}`
+          : `${cls} — not yet descended`;
       const look: HeroLook = d?.appearance?.cls ? d.appearance : { cls };
-      const portrait = portraitImg(look, 44);
-      if (dead) portrait.style.filter = "grayscale(1) brightness(0.6)";
-      const left = document.createElement("div");
-      left.style.cssText = "display:flex;align-items:center;gap:12px;min-width:0;";
-      left.append(portrait, info);
-      row.appendChild(left);
-      if (!dead) {
-        const enter = arcaneButton("ENTER", "primary");
-        enter.style.fontSize = "12px";
-        enter.style.padding = "8px 18px";
-        enter.onclick = () => finish({ key: entry.key });
-        row.appendChild(enter);
-      } else {
-        const rip = document.createElement("span");
-        rip.textContent = "AT REST";
-        rip.style.cssText = "font-size: 10px; color: #6a4a50; letter-spacing: 2px;";
-        row.appendChild(rip);
-      }
-      list.appendChild(row);
+      const row = pickRow(look, `${hc ? "☠ " : ""}${name}`, sub, dead ? "#6a5a5e" : CLASS_COLORS[cls] ?? "#cfc6d6", 38);
+      if (dead) { row.el.style.opacity = ".66"; row.el.querySelector("img")!.style.filter = "grayscale(1) brightness(0.6)"; }
+      row.el.onclick = () => select(entry);
+      row.el.ondblclick = () => { if (!d?.dead) finish({ key: entry.key }); };
+      rows.set(entry.key, row);
+      list.appendChild(row.el);
     }
+    enterBtn.onclick = () => { if (chosenKey) finish({ key: chosenKey }); };
 
     const buttons = document.createElement("div");
-    buttons.style.cssText = "display: flex; gap: 12px;";
+    buttons.style.cssText = "display:flex;gap:10px;";
 
     const newBtn = arcaneButton("★  NEW HERO", "primary");
+    newBtn.style.cssText += "flex:1;font-size:12px;padding:10px 12px;";
     newBtn.onclick = async () => {
+      stage.destroy();
       overlay.remove();
       const { cls, name, hardcore } = await showCreationScreen();
       const key = newKey();
@@ -444,9 +618,11 @@ function showHeroSelect(
     };
     buttons.appendChild(newBtn);
 
+    listPanel.append(list, buttons);
     if (mode === "join") {
-      const randBtn = arcaneButton("⚄  RANDOM HERO");
+      const randBtn = arcaneButton("⚄  RANDOM");
       randBtn.title = "Forged at the party's level, geared for this depth";
+      randBtn.style.cssText += "font-size:12px;padding:10px 12px;";
       randBtn.onclick = () => {
         const key = newKey();
         const cls = ["barbarian", "rogue", "sorcerer", "paladin", "necromancer", "druid"][Math.floor(Math.random() * 6)];
@@ -457,14 +633,33 @@ function showHeroSelect(
       buttons.appendChild(randBtn);
       const hint = document.createElement("div");
       hint.textContent = "random: matched to the party's level, gear rolled for this depth";
-      hint.style.cssText = "font-size: 10px; color: #6a6474; margin-top: 14px;";
-      panel.append(list, buttons, hint);
-    } else {
-      panel.append(list, buttons);
+      hint.style.cssText = "font-size:10px;color:#6a6474;margin-top:12px;line-height:1.5;";
+      listPanel.append(hint);
     }
 
-    overlay.append(header, panel);
+    const columns = document.createElement("div");
+    columns.style.cssText = "display:flex;gap:22px;align-items:stretch;justify-content:center;flex-wrap:wrap;";
+    columns.append(listPanel, stagePanel, detail);
+    overlay.append(header, columns);
     document.body.appendChild(overlay);
+
+    // open on whoever descended last, the way a roster should remember you
+    const lastKey = localStorage.getItem("arpg_key");
+    const opening = roster.find((e) => e.key === lastKey) ?? roster[0];
+    if (opening) {
+      select(opening);
+    } else {
+      // a browser joining someone else's game with nobody forged yet — an empty dais
+      const empty = document.createElement("div");
+      empty.className = "arc-empty";
+      empty.textContent = "No heroes yet. Forge one — the dungeon is patient.";
+      list.appendChild(empty);
+      stage.setLook(null);
+      nameEl.textContent = "—";
+      subEl.textContent = "the dais stands empty";
+      progress.appendChild(line("ROSTER", "empty", "#6a6474"));
+      enterBtn.disabled = true;
+    }
   });
 }
 

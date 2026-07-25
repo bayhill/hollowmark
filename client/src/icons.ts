@@ -329,14 +329,19 @@ const DRAWERS: Record<string, (g: G) => void> = {
   },
 };
 
-export function ensureItemIcons(scene: Phaser.Scene) {
+// `res` bakes the icons at a multiple of their native 36px. The drawers are vector, so a
+// higher res is genuinely sharper — it exists for the hero stage, which blows a weapon up
+// to a couple of hundred pixels and would otherwise show a smear of 36px mush. Callers
+// that pass res must divide their sprite scales by it to keep the same on-screen size.
+export function ensureItemIcons(scene: Phaser.Scene, res = 1) {
   const g = scene.add.graphics();
+  g.setScale(res);
   for (const [key, draw] of Object.entries(DRAWERS)) {
     const tex = `icon_${key}`;
     if (scene.textures.exists(tex)) continue;
     g.clear();
     draw(g);
-    g.generateTexture(tex, S, S);
+    g.generateTexture(tex, S * res, S * res);
   }
   g.destroy();
 }
