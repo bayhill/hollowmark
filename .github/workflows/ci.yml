@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # the live probes drive a real server through real fights; generous but bounded
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # server, client AND scripts — the probes went untypechecked for a long time
+      # and rotted (a generateDungeon signature change went unnoticed). Never again.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      # boots its own server on :2568 against a temp data dir, runs 18 probes + smoke
+      - name: Probe suite
+        run: npm run probes

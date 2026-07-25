@@ -62,8 +62,36 @@ Loot: seven rarities — common, magic, rare, **set** (green, partial + full bon
 ## Test
 
 ```sh
-npm run smoke        # headless 2-client multiplayer test (server must be running)
+npm run probes       # the whole suite: boots its own server, runs 18 probes + smoke
+npm run typecheck    # server + client + scripts
+npm run build        # client production build
+npm run smoke        # just the headless 2-client test (server must be running)
 ```
+
+`npm run probes` is the gate. It boots one throwaway server on `:2568` against a
+temporary data dir — so a run can never touch `data/profiles/` — waits for `/health`,
+then runs everything and reports a single pass/fail table.
+
+The suite lives in `scripts/probes/`:
+
+- **`offline/`** — pure checks against `@hollowmark/common`, no server: the lore and
+  Codex data models, glove generation, forest/dungeon connectivity across 500 seeds,
+  click-to-move pathfinding, and skill DPS role bands.
+- **`live/`** — drive a real server through its dev hooks (mercenaries, reforging,
+  champion affixes, legendary powers, the third skill trees, class keystones,
+  set-pieces, the story spine, Codex persistence, and hardcore permadeath).
+- **`balance-check`** is a *report*, not a gate: it prints tuning tables (pack density,
+  loot-per-floor, HP scaling) for a human to weigh, and never fails the run.
+
+Run one on its own against a dev server with `PROBE_ENDPOINT`:
+
+```sh
+npx tsx scripts/probes/offline/lore-check.ts
+PROBE_ENDPOINT=ws://localhost:2567 npx tsx scripts/probes/live/keystone-probe.ts
+```
+
+CI (`.github/workflows/ci.yml`) runs typecheck, build, and the probe suite on every
+push and pull request.
 
 ## Roadmap
 

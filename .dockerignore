@@ -11,8 +11,8 @@ data
 !.env.example
 *.log
 .DS_Store
-scratchpad
 scripts
+.github
 CHANGELOG.md
 LORE.md
 README.md

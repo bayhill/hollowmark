@@ -3,7 +3,7 @@
 //            completable from the ending fragment; titles/pages well-formed
 //   runtime: kill Vessira (act-boss beat) and Uldrath (the finale) through the real death
 //            path → the right storybeat fires, and Uldrath seals the Codex capstone
-// Run (needs dev server on :2567): npx tsx scratchpad/story-probe.ts
+// Run (needs dev server on :2567): npx tsx scripts/probes/live/story-probe.ts
 import { Client } from "colyseus.js";
 import {
   STORY_BEATS,
@@ -16,6 +16,7 @@ import {
   fragmentById,
 } from "@hollowmark/common";
 
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (n: string, ok: boolean, d: string) => { if (!ok) fails++; console.log(`${ok ? "✔" : "✗"} ${n}: ${d}`); };
@@ -52,7 +53,7 @@ async function killKind(room: any, kind: string) {
 }
 
 (async () => {
-  const c = new Client("ws://localhost:2567");
+  const c = new Client(ENDPOINT);
   const acct = `story${Date.now().toString(36)}`;
   const r: any = await c.create("dungeon", { key: `${acct}h`, account: acct, cls: "paladin", name: "StoryProbe" });
   r.onMessage("*", () => {});

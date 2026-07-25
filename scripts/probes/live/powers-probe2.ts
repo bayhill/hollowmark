@@ -2,7 +2,7 @@
 // hero per class. Targets are champs spawned in town (no aggro on sacred ground → stationary, safe).
 // Observable signals per power (broadcasts / synced state), asserted below. Requires dev hooks
 // (smokegod / smokelevel / smokepower / smokespawnchamp / smokeclear).
-//   PROBE_ENDPOINT=ws://localhost:2568 npx tsx scratchpad/powers-probe2.ts
+//   PROBE_ENDPOINT=ws://localhost:2568 npx tsx scripts/probes/live/powers-probe2.ts
 import { Client } from "colyseus.js";
 
 const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";

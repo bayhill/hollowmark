@@ -22,7 +22,7 @@ function bfs(map: { rows: string[]; w: number; h: number }, from: [number, numbe
 
 let treeCounts: number[] = [];
 for (let seed = 0; seed < 500; seed++) {
-  const d = generateDungeon(1, seed * 7717 + 13);
+  const d = generateDungeon(1, 1, seed * 7717 + 13); // act 1 floor 1 = the Mournfield surface
   const m = makeMap(d.rows);
   const fail = (msg: string) => { console.error(`seed ${seed}: ${msg}`); process.exit(1); };
   if (!d.cathedral) fail("no cathedral");
@@ -70,13 +70,19 @@ for (let seed = 0; seed < 500; seed++) {
   }
   treeCounts.push(d.rows.slice(12).join("").split("#").length - 1);
 }
-// deeper floors + cow still connect through the gate
+// deeper floors: the stairs must be walkable from the floor's OWN entrance. Not from
+// town — below the surface the town strip is carved sealed (carveTownPlaza(grid, false)),
+// so there is deliberately no path from the plaza into the deep.
 for (const floor of [2, 3, 4, 5, 7, 8, 10]) {
   for (let seed = 0; seed < 60; seed++) {
-    const d = generateDungeon(floor, seed * 3331 + 7);
+    const d = generateDungeon(1, floor, seed * 3331 + 7);
     const m = makeMap(d.rows);
-    if (!bfs(m, [tileOf(TOWN.spawn.x), tileOf(TOWN.spawn.y)], [tileOf(d.stairs.x), tileOf(d.stairs.y)])) {
-      console.error(`floor ${floor} seed ${seed}: stairs unreachable from town`);
+    if (!bfs(m, [tileOf(d.spawn.x), tileOf(d.spawn.y)], [tileOf(d.stairs.x), tileOf(d.stairs.y)])) {
+      console.error(`floor ${floor} seed ${seed}: stairs unreachable from the floor entrance`);
+      process.exit(1);
+    }
+    if (bfs(m, [tileOf(TOWN.spawn.x), tileOf(TOWN.spawn.y)], [tileOf(d.stairs.x), tileOf(d.stairs.y)])) {
+      console.error(`floor ${floor} seed ${seed}: the deep camp leaks into town — the strip must stay sealed`);
       process.exit(1);
     }
   }

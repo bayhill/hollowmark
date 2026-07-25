@@ -4,7 +4,7 @@
 //   • every lore fragment belongs to a real chapter and (if boss-sourced) a real boss
 //   • chapterComplete / codexChapterBonuses behave (partial → nothing, full → the boon)
 //   • every curated relic names a real unique/set item
-// Run: npx tsx scratchpad/codex-probe.ts
+// Run: npx tsx scripts/probes/offline/codex-probe.ts
 import {
   MONSTERS,
   isBossKind,

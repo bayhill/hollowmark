@@ -3,7 +3,13 @@
 import { Client, Room } from "colyseus.js";
 import { BASE_ITEMS, BOSS_SIGNATURES, CHAMPION_MODS, CLASSES, CLASS_ATTACKS, CLASS_BASE_ATTRS, EFFECTS, FIXED_ITEMS, FLOOR_THEMES, GAMBLE_WEIGHTS, GameMap, MERC_CLASSES, recruiterForAct, actTownNpcs, ACT_TOWN_NPCS, TOWN_NPCS, townNpcById, shrineNpcId, ENCOUNTERS, rollEncounter, encounterById, storytellerFor, MONSTER_ELEMENTS, MONSTERS, RANGED_MONSTERS, PORTAL_CAST_MS, PORTAL_RETURN_MS, QUESTS, TOWN_GATE_TX, TOWN_ROWS, RES_CAP, RUNES, RUNE_ORDER, RUNEWORDS, SETS, generateJewel, SKILL_TREES, SKILL_POWERS, TILE, TIER_LEVELS, TOWN, UNIDENTIFIED_RARITIES, attrBonus, bossKindForFloor, bountyGoalFor, bountyTextFor, canAllocSkill, canStand, hasLineOfSight, generateCharm, generateCowLevel, generateDungeon, generateFixedItem, generateItem, generateRune, identifyCost, isBossKind, isInTown, makeMap, matchRuneword, maxHpFor, pickMonsterKind, potionCapFor, resistOf, skillDamageMult, tileAt, visualThemeIndexForFloor, visualThemeFor, actBossKindFor, ACT_FLOORS, ABYSS_ACT } from "@hollowmark/common";
 
-const ENDPOINT = "ws://localhost:2567";
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
+// the HTTP layer (/rooms, /legends, /heroes) rides the same server as the socket
+const HTTP = ENDPOINT.replace(/^ws/, "http");
+// The rush test seeds a veteran profile straight onto disk, so it has to write where
+// the server under test actually reads. Mirror persistence.ts: ARPG_DATA_DIR wins,
+// else the dev default (the server runs from server/, so cwd/data/profiles).
+const PROFILE_DIR = process.env.ARPG_DATA_DIR || "server/data/profiles";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function parseMap(room: Room): GameMap {
@@ -272,7 +278,7 @@ async function main() {
 
   // --- lobby listing: the /rooms endpoint sees this game ---
   {
-    const res = await fetch("http://localhost:2567/rooms");
+    const res = await fetch(`${HTTP}/rooms`);
     const rooms: any[] = await res.json();
     const ours = rooms.find((r) => r.roomId === r1.roomId);
     if (!ours) throw new Error("our game is missing from the lobby list");
@@ -479,7 +485,7 @@ async function main() {
     if (!rejected) throw new Error("a fallen hardcore hero was allowed back into the world");
 
     // and the Hall of Legends remembers
-    const legends: any[] = await (await fetch("http://localhost:2567/legends")).json();
+    const legends: any[] = await (await fetch(`${HTTP}/legends`)).json();
     const doomed = legends.find((l) => l.name === "Doomed" && l.hardcore && l.dead);
     if (!doomed) throw new Error("the Hall of Legends forgot the fallen");
     console.log(`hardcore works: Doomed fell forever in ${hcDeath.where} (slain by ${hcDeath.by}); corpse stayed down, re-entry refused, Hall of Legends updated`);
@@ -2008,7 +2014,7 @@ async function main() {
 
   // the roster screen's data source: /heroes knows this hero by key
   {
-    const res = await fetch(`http://localhost:2567/heroes?keys=${smokeKey}`);
+    const res = await fetch(`${HTTP}/heroes?keys=${smokeKey}`);
     const heroes: any[] = await res.json();
     const hero = heroes.find((h) => h.key === smokeKey);
     if (!hero || hero.name !== snapshot.name || hero.level !== snapshot.level) {
@@ -2087,7 +2093,7 @@ async function main() {
       deepestFloor: 10, actsUnlocked: 2, diffUnlocked: 2, waypoints: ["1:1", "1:3", "2:1"], abyssDeepest: 0,
       updatedAt: Date.now(),
     };
-    fs.writeFileSync(`server/data/profiles/${vKey}.json`, JSON.stringify(vetProf));
+    fs.writeFileSync(`${PROFILE_DIR}/${vKey}.json`, JSON.stringify(vetProf));
     const cV = new Client(ENDPOINT);
     // he asks for HELL — the server clamps him to the Nightmare he actually earned
     const rV = await cV.create("dungeon", { key: vKey, cls: "barbarian", name: "Roadmaker", difficulty: 3 });
@@ -2152,7 +2158,7 @@ async function main() {
     if (fieldWps !== 1) throw new Error(`floor 3 should hold one field waypoint, found ${fieldWps}`);
     console.log("the rush works: Roadmaker rode the network to Act II and back to a mid-act stone (field waypoint present)");
     await rV.leave();
-    fs.unlinkSync(`server/data/profiles/${vKey}.json`);
+    fs.unlinkSync(`${PROFILE_DIR}/${vKey}.json`);
   }
 
   await r3.leave();

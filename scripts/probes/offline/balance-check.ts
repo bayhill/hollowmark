@@ -1,6 +1,6 @@
 // Balance report — measures the real drop economy (Monte-Carlo over generateItem)
 // and the depth/HP scaling curve, so tuning is data-driven not vibes. No server.
-//   npx tsx scratchpad/balance-check.ts
+//   npx tsx scripts/probes/offline/balance-check.ts
 import {
   generateItem, RARITY_WEIGHTS, BOSS_RARITY_WEIGHTS, RARITY_ORDER, Rarity,
   DROP_CHANCE, RUNE_DROP_CHANCE, CHARM_DROP_CHANCE, JEWEL_DROP_CHANCE,

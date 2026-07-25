@@ -1,6 +1,7 @@
 import { Client } from "colyseus.js";
 import { TILE, TOWN, makeMap, isInTown } from "@hollowmark/common";
 
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
 const tileOf = (w: number) => Math.floor(w / TILE);
 function bfs(map: any, from: [number, number], to: [number, number]): Array<[number, number]> | null {
   const key = (x: number, y: number) => `${x},${y}`;
@@ -32,10 +33,10 @@ function bfs(map: any, from: [number, number], to: [number, number]): Array<[num
 }
 
 async function main() {
-  const c1 = new Client("ws://localhost:2567");
+  const c1 = new Client(ENDPOINT);
   const r1 = await c1.create("dungeon", { key: `probe${Date.now().toString(36)}`, cls: "barbarian", name: "Watcher" });
   r1.onMessage("*", () => {});
-  const cHC = new Client("ws://localhost:2567");
+  const cHC = new Client(ENDPOINT);
   const rHC = await cHC.joinById(r1.roomId, { key: `doom${Date.now().toString(36)}`, cls: "sorcerer", name: "Doomed", hardcore: true });
   rHC.onMessage("*", () => {});
   await new Promise((r) => setTimeout(r, 800));

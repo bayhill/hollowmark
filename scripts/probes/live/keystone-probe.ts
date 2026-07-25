@@ -3,7 +3,7 @@
 // delta is provably the keystone's doing. Deterministic — no averaging. Requires dev hooks
 // (smokelevel / smokegod / smokeset / smokedmg / smokechill / smokehurt / smokespawnkind /
 // smokedmgmob).
-//   PROBE_ENDPOINT=ws://localhost:2568 npx tsx scratchpad/keystone-probe.ts
+//   PROBE_ENDPOINT=ws://localhost:2568 npx tsx scripts/probes/live/keystone-probe.ts
 import { Client } from "colyseus.js";
 
 const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";

@@ -2,6 +2,7 @@
 // -> recordKill) and verifies bestiary counts, boss fragments, a chapter-complete boon, and
 // that it all survives a reconnect (persistence). Requires the dev server on :2567.
 import { Client } from "colyseus.js";
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (n: string, ok: boolean, d: string) => { if (!ok) fails++; console.log(`${ok ? "✔" : "✗"} ${n}: ${d}`); };
@@ -17,7 +18,7 @@ async function killKind(room: any, kind: string) {
 }
 
 (async () => {
-  const c = new Client("ws://localhost:2567");
+  const c = new Client(ENDPOINT);
   const acct = `codexrt${Date.now().toString(36)}`;
   const r: any = await c.create("dungeon", { key: `${acct}h`, account: acct, cls: "barbarian", name: "CodexRT" });
   r.onMessage("*", () => {});

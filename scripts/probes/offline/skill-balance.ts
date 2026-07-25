@@ -2,7 +2,7 @@
 // (rank 5, no gear, no synergies — a level playing field). Converts each skill's per-cast output
 // to a single-target-equivalent sustained DPS so peers can be compared, folding in DoT ticks
 // (Rend bleed) and hazard tick totals (Caltrops/Noxious/Blizzard). Flags anything outside its
-// role band. No server. Run:  npx tsx scratchpad/skill-balance.ts
+// role band. No server. Run:  npx tsx scripts/probes/offline/skill-balance.ts
 import {
   SKILL_TREES, FIREWALL_TICK_MS, REND_BLEED_FRACTION,
   CALTROPS_MULT, CALTROPS_MS, NOXIOUS_MULT, NOXIOUS_MS, BLIZZARD_MULT, BLIZZARD_MS,

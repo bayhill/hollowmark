@@ -1,7 +1,7 @@
 // Validates the movement fix's premise against REAL generated maps: town and field are walled
 // apart except at the single gate, a straight line between them is blocked (so old ground-clicks
 // jammed), and the client BFS (findPath) routes through the gate. Mirrors GameScene's findPath /
-// lineClear / nearestStandable exactly. No server, no browser.  npx tsx scratchpad/pathfind-check.ts
+// lineClear / nearestStandable exactly. No server, no browser.  npx tsx scripts/probes/offline/pathfind-check.ts
 import {
   generateDungeon, makeMap, TOWN, TILE, TOWN_GATE_TX, TOWN_ROWS,
   tileAt, canStand, isInTown, GameMap,

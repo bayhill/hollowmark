@@ -3,7 +3,7 @@
 //            completable from set-pieces; acts/variants/pages well-formed
 //   runtime: smokesetpiece spawns a scene → touchshrine recovers its fragment, dedups on
 //            re-touch, and finishing all of a chapter's set-pieces fires the chapter boon
-// Run (needs dev server on :2567): npx tsx scratchpad/setpiece-probe.ts
+// Run (needs dev server on :2567): npx tsx scripts/probes/live/setpiece-probe.ts
 import { Client } from "colyseus.js";
 import {
   SETPIECES,
@@ -16,6 +16,7 @@ import {
   chapterFragments,
 } from "@hollowmark/common";
 
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (n: string, ok: boolean, d: string) => { if (!ok) fails++; console.log(`${ok ? "✔" : "✗"} ${n}: ${d}`); };
@@ -63,7 +64,7 @@ async function spawnAndTouch(room: any, spId: string) {
 }
 
 (async () => {
-  const c = new Client("ws://localhost:2567");
+  const c = new Client(ENDPOINT);
   const acct = `sprt${Date.now().toString(36)}`;
   const r: any = await c.create("dungeon", { key: `${acct}h`, account: acct, cls: "rogue", name: "SPProbe" });
   r.onMessage("*", () => {});

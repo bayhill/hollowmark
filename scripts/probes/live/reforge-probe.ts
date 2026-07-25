@@ -7,7 +7,7 @@
 import { Client } from "colyseus.js";
 import { TOWN, TOWN_INTERACT_RANGE } from "@hollowmark/common";
 
-const ENDPOINT = "ws://localhost:2567";
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {

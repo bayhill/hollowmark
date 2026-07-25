@@ -4,7 +4,7 @@
 // synced monster hp (damage + damage-over-time), synced projectile/pet counts, and FX broadcasts
 // (poolfx / piercefx / rendfx / classfx). Requires dev hooks (smokegod / smokelevel /
 // smokespawnchamp / smokeclear).
-//   PROBE_ENDPOINT=ws://localhost:2568 npx tsx scratchpad/skills-probe.ts
+//   PROBE_ENDPOINT=ws://localhost:2568 npx tsx scripts/probes/live/skills-probe.ts
 import { Client } from "colyseus.js";
 
 const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";

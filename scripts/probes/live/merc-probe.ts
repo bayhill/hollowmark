@@ -1,7 +1,8 @@
 import { Client } from "colyseus.js";
 import { TOWN } from "@hollowmark/common";
+const ENDPOINT = process.env.PROBE_ENDPOINT || "ws://localhost:2567";
 async function main() {
-  const c = new Client("ws://localhost:2567");
+  const c = new Client(ENDPOINT);
   const r = await c.create("dungeon", { key: `mp${Date.now().toString(36)}`, cls: "barbarian", name: "Probe" });
   let mercs: any = null;
   r.onMessage("openmercs", (m: any) => (mercs = m));
