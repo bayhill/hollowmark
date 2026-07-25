@@ -352,6 +352,14 @@ export class InventoryPanel {
             );
             y += texts[texts.length - 1].height + 1;
           }
+          if (rw.power && SKILL_POWERS[rw.power]) {
+            texts.push(
+              this.scene.add.text(10, y, `  ★ ${SKILL_POWERS[rw.power].name} — ${SKILL_POWERS[rw.power].desc}`, {
+                fontFamily: "monospace", fontSize: "12px", color: "#ff8033", fontStyle: "italic", wordWrap: { width: 300 },
+              })
+            );
+            y += texts[texts.length - 1].height + 1;
+          }
         }
       }
     }

@@ -3,7 +3,7 @@ import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { DungeonRoom } from "./rooms/DungeonRoom";
 import { listProfiles, loadProfile, validKey } from "./persistence";
-import { CURRENT_SEASON } from "@hollowmark/common";
+import { CURRENT_SEASON, RARITY_ORDER } from "@hollowmark/common";
 
 const port = Number(process.env.PORT || 2567);
 
@@ -22,13 +22,26 @@ const httpServer = http.createServer(async (req, res) => {
     const keys = (url.searchParams.get("keys") ?? "").split(",").filter(validKey).slice(0, 20);
     const heroes = keys.map((key) => {
       const prof = loadProfile(key);
-      return prof
-        ? {
-            key, name: prof.name ?? "", cls: prof.cls, level: prof.level, deepestFloor: prof.deepestFloor ?? 1,
-            actsUnlocked: prof.actsUnlocked ?? 1, diffUnlocked: prof.diffUnlocked ?? 1, abyssDeepest: prof.abyssDeepest ?? 0,
-            hardcore: !!prof.hardcore, dead: !!prof.dead, diedFloor: prof.diedFloor ?? 0, diedAct: prof.diedAct ?? 0, diedTo: prof.diedTo ?? "",
-          }
-        : { key, name: "", cls: "", level: 0, deepestFloor: 0, actsUnlocked: 0, diffUnlocked: 0, abyssDeepest: 0, hardcore: false, dead: false, diedFloor: 0, diedAct: 0, diedTo: "" }; // never joined yet
+      if (!prof) return { key, name: "", cls: "", level: 0, deepestFloor: 0, actsUnlocked: 0, diffUnlocked: 0, abyssDeepest: 0, hardcore: false, dead: false, diedFloor: 0, diedAct: 0, diedTo: "" }; // never joined yet
+      // the equipped look, so the Roster can draw the hero exactly as they walk the dungeon
+      let gearTier = 0;
+      for (const item of Object.values(prof.gear ?? {})) if (item) gearTier = Math.max(gearTier, RARITY_ORDER.indexOf(item.rarity));
+      const appearance = {
+        cls: prof.cls,
+        weaponBase: prof.gear?.weapon?.base ?? "",
+        offhandBase: prof.gear?.offhand?.base ?? "",
+        helmBase: prof.gear?.helm?.base ?? "",
+        chestBase: prof.gear?.chest?.base ?? "",
+        bootsBase: prof.gear?.boots?.base ?? "",
+        beltBase: prof.gear?.belt?.base ?? "",
+        gearTier,
+      };
+      return {
+        key, name: prof.name ?? "", cls: prof.cls, level: prof.level, deepestFloor: prof.deepestFloor ?? 1,
+        actsUnlocked: prof.actsUnlocked ?? 1, diffUnlocked: prof.diffUnlocked ?? 1, abyssDeepest: prof.abyssDeepest ?? 0,
+        hardcore: !!prof.hardcore, dead: !!prof.dead, diedFloor: prof.diedFloor ?? 0, diedAct: prof.diedAct ?? 0, diedTo: prof.diedTo ?? "",
+        appearance,
+      };
     });
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(heroes));

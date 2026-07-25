@@ -326,6 +326,7 @@ export class Sfx {
 
   private startAmbient(themeIdx: number, force = false) {
     if (!this.ctx || !this.ambientEnabled) return;
+    this.stopLobbyTheme(); // the depth bed and the lobby drums never play together
     if (!force && this.ambientTheme === themeIdx) return;
     this.stopAmbient();
     this.ambientTheme = themeIdx;
@@ -645,6 +646,7 @@ export class Sfx {
   // call stopLobbyTheme() when the descent begins and the dungeon's own bed takes over.
   startLobbyTheme() {
     if (!this.ctx || this.lobbyOn) return;
+    this.stopAmbient(); // the lobby drums and any lingering depth bed never play together
     this.lobbyOn = true;
     const ctx = this.ctx;
     this.ensureReverb();

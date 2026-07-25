@@ -24,6 +24,11 @@ import {
   RELIC_LORE,
   chapterFragments,
   chapterComplete,
+  RUNEWORDS,
+  RUNES,
+  runeRarity,
+  EFFECTS,
+  SKILL_POWERS,
   mercClassById,
   skillById,
   visualThemeIndexForFloor,
@@ -70,9 +75,15 @@ export class UIScene extends Phaser.Scene {
   // the Codex — the account's remembered world (bestiary / chronicle / relics)
   private codexRoot?: Phaser.GameObjects.Container;
   private codexBounds = new Phaser.Geom.Rectangle(0, 0, 0, 0);
-  private codexTab = 0; // 0 Bestiary · 1 Chronicle · 2 Relics
+  private codexTab = 0; // 0 Bestiary · 1 Chronicle · 2 Relics · 3 Runewords
   codexVisible = false;
   private codex: { bestiary: Record<string, number>; fragments: string[]; relics: string[] } = { bestiary: {}, fragments: [], relics: [] };
+  // the Runewords tab scrolls — the grimoire is long. These track its masked viewport.
+  private codexScroll?: Phaser.GameObjects.Container;
+  private codexScrollMask?: Phaser.GameObjects.Graphics;
+  private codexScrollY = 0; // current offset (0 = top, negative scrolls down)
+  private codexScrollMinY = 0; // most-negative offset (content bottom)
+  private codexScrollTopLocal = 0; // scroll container's un-scrolled local y within root
   private endingVeil?: Phaser.GameObjects.Rectangle; // full-screen veil behind the finale cinematic
 
   private trackedQuestId: string | null = localStorage.getItem("arpg_tracked_quest");
@@ -265,6 +276,13 @@ export class UIScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown-H", () => !this.chatActive && this.toggleMercPanel());
     // U hides the top info bar — for a cleaner, more immersive screen
     this.input.keyboard?.on("keydown-U", () => !this.chatActive && this.hud.setVisible(!this.hud.visible));
+
+    // wheel scrolls the Codex's Runewords grimoire (its list outruns the panel)
+    this.input.on("wheel", (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+      if (!this.codexVisible || this.codexTab !== 3 || !this.codexScroll) return;
+      this.codexScrollY = Phaser.Math.Clamp(this.codexScrollY - dy * 0.5, this.codexScrollMinY, 0);
+      this.codexScroll.y = this.codexScrollTopLocal + this.codexScrollY;
+    });
 
     // chat entry + the escape ladder (chat → panels → game menu) share one listener
     this.chatBar = this.add
@@ -905,6 +923,9 @@ export class UIScene extends Phaser.Scene {
     this.codexVisible = false;
     this.codexRoot?.destroy();
     this.codexRoot = undefined;
+    this.codexScrollMask?.destroy();
+    this.codexScrollMask = undefined;
+    this.codexScroll = undefined;
   }
 
   // open a Codex entry's prose in the shared dialogue window (paged, space/click to advance)
@@ -922,13 +943,16 @@ export class UIScene extends Phaser.Scene {
 
   private rebuildCodexPanel() {
     this.codexRoot?.destroy();
+    this.codexScrollMask?.destroy();
+    this.codexScrollMask = undefined;
+    this.codexScroll = undefined;
     const W = 380;
     const x = Math.round(this.scale.width / 2 - W / 2);
     const y = 56;
     const root = this.add.container(x, y).setDepth(20);
     const rows: Phaser.GameObjects.GameObject[] = [];
 
-    const TABS = ["BESTIARY", "CHRONICLE", "RELICS"];
+    const TABS = ["BESTIARY", "CHRONICLE", "RELICS", "WORDS"];
     const tabH = 24;
     const tabTop = 40;
     const tabGap = 6;
@@ -951,6 +975,7 @@ export class UIScene extends Phaser.Scene {
 
     const listTop = tabTop + tabH + 14;
     let contentBottom = listTop;
+    let footerHint = "click a recorded entry to read it";
 
     if (this.codexTab === 0) {
       // Bestiary — two columns, one line each, click a known kind to read it
@@ -971,7 +996,15 @@ export class UIScene extends Phaser.Scene {
         const insight = seen && kills >= e.insightAt;
         const color = !seen ? "#55505e" : insight ? "#c9a44a" : "#c3c3d0";
         const label = seen ? `${insight ? "✦" : "•"} ${e.name}` : "• ??????";
-        rows.push(this.add.text(colX[col], ry, label, { fontFamily: "monospace", fontSize: "12px", color }).setOrigin(0, 0));
+        const nameText = this.add.text(colX[col], ry, label, { fontFamily: "monospace", fontSize: "12px", color }).setOrigin(0, 0);
+        // long boss names (e.g. "Corvessa, the Carrion Bride") would run past the column and out
+        // of the panel — keep the name inside its column, clear of the right-aligned ×kills counter
+        const nameMaxW = colW - (seen ? 34 : 6);
+        if (nameText.width > nameMaxW) {
+          let s = label;
+          do { s = s.slice(0, -1); nameText.setText(`${s}…`); } while (s.length > 2 && nameText.width > nameMaxW);
+        }
+        rows.push(nameText);
         if (seen) {
           rows.push(this.add.text(colX[col] + colW, ry, `×${kills}`, { fontFamily: "monospace", fontSize: "11px", color: "#7a7a86" }).setOrigin(1, 0));
           const hit = this.add.rectangle(colX[col] + colW / 2, ry + 8, colW, rowH, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
@@ -1019,7 +1052,7 @@ export class UIScene extends Phaser.Scene {
       }
       contentBottom = cy;
 
-    } else {
+    } else if (this.codexTab === 2) {
       // Relics — the story of every signature item you've carried
       const got = RELIC_LORE.filter((r) => this.codex.relics.includes(r.name)).length;
       rows.push(this.add.text(W / 2, listTop - 12, `catalogued ${got} / ${RELIC_LORE.length}`, {
@@ -1042,10 +1075,86 @@ export class UIScene extends Phaser.Scene {
         cy += rowH;
       }
       contentBottom = cy;
+
+    } else {
+      // Runewords — the grimoire. Every word, its runes IN ORDER (each in its own drop-
+      // colour), where it seats, and what it grants. The list outruns the panel, so it
+      // lives in a masked, wheel-scrolled sub-container.
+      rows.push(this.add.text(W / 2, listTop - 12, "seat these runes, in order, in a plain white item", {
+        fontFamily: "monospace", fontSize: "11px", color: "#7a6a9a",
+      }).setOrigin(0.5, 0));
+
+      const viewTop = listTop + 6;
+      const availMax = this.scale.height - y - viewTop - 46; // keep the panel fully on-screen
+      const wrapW = W - 46;
+      const scroll = this.add.container(0, viewTop);
+      let yy = 0;
+      for (const rw of RUNEWORDS) {
+        scroll.add(this.add.text(18, yy, rw.name, {
+          fontFamily: "monospace", fontSize: "13px", color: "#c9b8e8", fontStyle: "bold",
+        }));
+        scroll.add(this.add.text(W - 18, yy, `◈ ${rw.slots.join(" / ")}`, {
+          fontFamily: "monospace", fontSize: "11px", color: "#8a8a96",
+        }).setOrigin(1, 0));
+        yy += 17;
+        // the runes, laid out left-to-right in socket order, each in its rarity colour
+        let rx = 28;
+        rw.runes.forEach((rid, i) => {
+          if (i > 0) {
+            const arrow = this.add.text(rx, yy, "→", { fontFamily: "monospace", fontSize: "12px", color: "#5a5566" });
+            scroll.add(arrow);
+            rx += arrow.width + 4;
+          }
+          const rt = this.add.text(rx, yy, RUNES[rid]?.name ?? rid, {
+            fontFamily: "monospace", fontSize: "12px", color: rarityColorStr(runeRarity(rid)), fontStyle: "bold",
+          });
+          scroll.add(rt);
+          rx += rt.width + 4;
+        });
+        yy += 16;
+        const bonusT = this.add.text(28, yy, statLines(rw.bonus).join("   "), {
+          fontFamily: "monospace", fontSize: "11px", color: "#9aa0b4", wordWrap: { width: wrapW },
+        });
+        scroll.add(bonusT);
+        yy += bonusT.height + 2;
+        if (rw.effect && EFFECTS[rw.effect]) {
+          const e = EFFECTS[rw.effect];
+          const effT = this.add.text(28, yy, `✦ ${e.name} — ${e.desc}`, {
+            fontFamily: "monospace", fontSize: "10px", color: "#c9a44a", fontStyle: "italic", wordWrap: { width: wrapW },
+          });
+          scroll.add(effT);
+          yy += effT.height + 2;
+        }
+        if (rw.power && SKILL_POWERS[rw.power]) {
+          const pw = SKILL_POWERS[rw.power];
+          const pwT = this.add.text(28, yy, `★ ${pw.name} — ${pw.desc}`, {
+            fontFamily: "monospace", fontSize: "10px", color: "#e0843c", fontStyle: "italic", wordWrap: { width: wrapW },
+          });
+          scroll.add(pwT);
+          yy += pwT.height + 2;
+        }
+        yy += 10;
+      }
+
+      const contentH = yy;
+      const VIEW_H = Math.min(contentH, Math.max(120, availMax));
+      // clip the list to its viewport (a geometry mask lives in screen space)
+      const maskG = this.add.graphics().setVisible(false);
+      maskG.fillStyle(0xffffff).fillRect(x + 8, y + viewTop, W - 16, VIEW_H);
+      scroll.setMask(maskG.createGeometryMask());
+      this.codexScroll = scroll; // added to root after arcaneFrame so the panel fill sits behind it
+      this.codexScrollMask = maskG;
+      this.codexScrollTopLocal = viewTop;
+      this.codexScrollY = 0;
+      this.codexScrollMinY = Math.min(0, VIEW_H - contentH);
+      scroll.y = viewTop;
+
+      contentBottom = viewTop + VIEW_H;
+      footerHint = contentH > VIEW_H ? "scroll for more · the base item must be plain white" : "the base item must be plain white";
     }
 
     const footer = contentBottom + 6;
-    rows.push(this.add.text(W / 2, footer, "click a recorded entry to read it", {
+    rows.push(this.add.text(W / 2, footer, footerHint, {
       fontFamily: "monospace", fontSize: "10px", color: "#6a6a74",
     }).setOrigin(0.5, 0));
     const H = footer + 22;
@@ -1054,6 +1163,8 @@ export class UIScene extends Phaser.Scene {
     const closeX = this.add.text(W - 10, 6, "✕", { fontFamily: "monospace", fontSize: "15px", color: "#8a8a96" })
       .setOrigin(1, 0).setInteractive({ useHandCursor: true }).on("pointerdown", () => this.closeCodex());
     root.add([closeX, ...rows]);
+    // the Runewords scroll container renders above the panel fill but is added last of all
+    if (this.codexScroll) root.add(this.codexScroll);
     this.codexRoot = root;
     this.codexBounds.setTo(x, y, W, H);
   }

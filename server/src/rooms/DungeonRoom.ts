@@ -2717,6 +2717,7 @@ export class DungeonRoom extends Room<DungeonState> {
         if (rw) {
           addStats(totals, rw.bonus);
           if (rw.effect) p.effects.add(rw.effect);
+          if (rw.power) p.powers.add(rw.power); // grail words carry a build-defining skill rewrite
         }
       }
     }

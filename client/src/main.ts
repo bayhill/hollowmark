@@ -3,7 +3,18 @@ import { GameScene } from "./GameScene";
 import { UIScene } from "./UIScene";
 import { SERVER_HTTP } from "./config";
 import { sfx } from "./sfx";
+import { heroPortrait, HeroLook } from "./heroPreview";
 import { arcaneOverlay, arcaneHeader, arcanePanel, arcaneButton } from "./arcaneDom";
+
+// a portrait <img> that fills in once the offscreen renderer has drawn the hero
+function portraitImg(look: HeroLook, size: number): HTMLImageElement {
+  const img = document.createElement("img");
+  img.width = size;
+  img.height = Math.round(size * 1.31); // portrait aspect (128×168)
+  img.style.cssText = `width:${size}px;height:${Math.round(size * 1.31)}px;image-rendering:auto;display:block;`;
+  heroPortrait(look).then((src) => { img.src = src; }).catch(() => { /* offline / render failed — no portrait */ });
+  return img;
+}
 
 // One muted class palette shared by every pre-game screen — class identity is the
 // only hue the arcane chrome lets through (the way loot rarity keeps its colour).
@@ -17,12 +28,19 @@ const CLASS_COLORS: Record<string, string> = {
 // click (or key), start the lobby's doom-drums, and leave the AudioContext live so the
 // town lament begins on its own when town loads. { once } — one and done.
 function armAudioUnlock() {
+  const opts = { capture: true } as const;
   const unlock = () => {
+    // one gesture is enough. Tear down BOTH arming listeners here — they're separate
+    // { once } handlers, so if the pointer fired it the keydown stays armed, and the
+    // first in-game keypress would re-fire this and restart the lobby drums over the
+    // dungeon bed. Removing both is what keeps the lobby theme from leaking into play.
+    window.removeEventListener("pointerdown", unlock, opts);
+    window.removeEventListener("keydown", unlock, opts);
     sfx.ensure();
     sfx.startLobbyTheme();
   };
-  window.addEventListener("pointerdown", unlock, { once: true, capture: true });
-  window.addEventListener("keydown", unlock, { once: true, capture: true });
+  window.addEventListener("pointerdown", unlock, { ...opts, once: true });
+  window.addEventListener("keydown", unlock, { ...opts, once: true });
 }
 
 // --- character creation: shown once, before the descent begins ---
@@ -106,13 +124,17 @@ function showCreationScreen(): Promise<{ cls: string; name: string; hardcore: bo
         width: 210px; padding: 16px 15px; cursor: pointer; user-select: none; border-radius: 4px;
         background: linear-gradient(180deg,#161220,#100d18); border: 1px solid rgba(95,88,102,0.5); transition: all .15s;
       `;
+      // a living preview of the class, drawn as the in-game hero would look unarmoured
+      const portraitWrap = document.createElement("div");
+      portraitWrap.style.cssText = "display:flex;justify-content:center;margin-bottom:8px;";
+      portraitWrap.appendChild(portraitImg({ cls: card.cls }, 78));
       const title = document.createElement("div");
       title.textContent = card.title.toUpperCase();
-      title.style.cssText = `font-size: 16px; font-weight: bold; letter-spacing: 2px; color: ${clsColor}; margin-bottom: 9px;`;
+      title.style.cssText = `font-size: 16px; font-weight: bold; letter-spacing: 2px; color: ${clsColor}; margin-bottom: 9px; text-align: center;`;
       const blurb = document.createElement("div");
       blurb.textContent = card.blurb;
       blurb.style.cssText = "font-size: 11px; line-height: 1.55; color: #8a8494;";
-      el.append(title, blurb);
+      el.append(portraitWrap, title, blurb);
       el.onmouseenter = () => { if (chosen !== card.cls) el.style.borderColor = "rgba(154,147,162,0.6)"; };
       el.onmouseleave = () => { if (chosen !== card.cls) el.style.borderColor = "rgba(95,88,102,0.5)"; };
       el.onclick = () => {
@@ -385,7 +407,14 @@ function showHeroSelect(
       const info = document.createElement("div");
       info.innerHTML = `<div style="font-size:14px;font-weight:bold;color:${dead ? "#6a5a5e" : CLASS_COLORS[cls] ?? "#cfc6d6"};">${hc ? "☠ " : ""}${name}</div>
         <div style="font-size:10px;color:${dead ? "#7a5a60" : "#8a8494"};">${sub}</div>`;
-      row.appendChild(info);
+      // the hero exactly as they look in the dungeon — their gear if the server knows it, else the bare class
+      const look: HeroLook = d?.appearance?.cls ? d.appearance : { cls };
+      const portrait = portraitImg(look, 44);
+      if (dead) portrait.style.filter = "grayscale(1) brightness(0.6)";
+      const left = document.createElement("div");
+      left.style.cssText = "display:flex;align-items:center;gap:12px;min-width:0;";
+      left.append(portrait, info);
+      row.appendChild(left);
       if (!dead) {
         const enter = arcaneButton("ENTER", "primary");
         enter.style.fontSize = "12px";

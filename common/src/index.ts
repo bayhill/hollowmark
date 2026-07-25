@@ -2425,15 +2425,34 @@ export const RUNES: Record<string, RuneDef> = {
   ulth: { id: "ulth", name: "Ulth", stats: { allRes: 12 }, minIlvl: 28 },
 };
 
+// Runes read as a rarity ladder on the ground, just like any other drop: the cheap
+// early runes are white/blue, and the deep alphabet burns rare → epic. This is a
+// DISPLAY tier only — a rune item's stored rarity stays "magic" (see generateRune),
+// so nothing downstream (sell value, altar recipes) changes.
+export function runeRarity(runeId: string): Rarity {
+  const minIlvl = RUNES[runeId]?.minIlvl ?? 1;
+  if (minIlvl <= 2) return "common";
+  if (minIlvl <= 5) return "magic";
+  if (minIlvl <= 8) return "rare";
+  if (minIlvl <= 17) return "legendary";
+  return "epic";
+}
+
 export interface Runeword {
   name: string;
   runes: string[]; // exact order, must fill every socket
   slots: Slot[];
   bonus: ItemStats;
-  effect?: string;
+  effect?: string; // a proc from EFFECTS
+  power?: string; // a build-defining skill rewrite from SKILL_POWERS (the grails only)
 }
 
+// Runeword bonuses are applied FLAT (unlike epic/unique gear, which scales its stats
+// with item level). So the words that are meant to rival end-game legends carry big,
+// deliberate flat numbers — and the four-socket grails at the bottom pair an epic-tier
+// stat package with a signature effect and, for two of them, a build-defining skill power.
 export const RUNEWORDS: Runeword[] = [
+  // ── early words: cheap, shallow runes — honest power for the first act or two ──
   { name: "Warbrand", runes: ["ond", "vek"], slots: ["weapon"], bonus: { dmg: 6, atkSpd: 15, crit: 3 } },
   { name: "Ghoststep", runes: ["ond", "fyr"], slots: ["chest", "helm"], bonus: { moveSpd: 15, atkSpd: 10, cdr: 5 } },
   { name: "Kindling", runes: ["ond", "fyr"], slots: ["weapon"], bonus: { fireDmg: 10, maxMana: 10 } },
@@ -2442,35 +2461,36 @@ export const RUNEWORDS: Runeword[] = [
   { name: "King's Purse", runes: ["mur", "ash"], slots: ["chest"], bonus: { goldFind: 40, magicFind: 10 } },
   { name: "Clarity", runes: ["fyr", "kel", "vor"], slots: ["weapon", "offhand"], bonus: { maxMana: 30, regen: 3 }, effect: "arcane_surge" },
   { name: "Ruin", runes: ["vor", "karn"], slots: ["weapon"], bonus: { dmgPct: 30, fireDmg: 8 }, effect: "corpse_explosion" },
-  // the one everyone farms four sockets for
-  { name: "Anima", runes: ["ond", "hym", "zel", "vor"], slots: ["weapon", "offhand"], bonus: { dmgPct: 20, maxMana: 25, cdr: 10, moveSpd: 10 }, effect: "arcane_surge" },
-  // the deep book: words for the sharpened worlds
+  // the accessible four-socket workhorse — strong, but every rune in it is shallow
+  { name: "Anima", runes: ["ond", "hym", "zel", "vor"], slots: ["weapon", "offhand"], bonus: { dmgPct: 30, maxMana: 45, cdr: 15, moveSpd: 12 }, effect: "arcane_surge" },
+  // ── the deep book: words for the sharpened worlds, three sockets of real power ──
   { name: "Mournfield", runes: ["vek", "hym", "vek"], slots: ["chest"], bonus: { armor: 8, coldRes: 15, maxHp: 20 } },
   { name: "Sunscar", runes: ["fyr", "fyr", "tor"], slots: ["weapon"], bonus: { fireDmg: 14, dmgPct: 15 }, effect: "immolation" },
   { name: "Undertow", runes: ["hym", "mur", "vor"], slots: ["weapon"], bonus: { coldDmg: 10, maxMana: 15, lifeSteal: 2 }, effect: "frostnova_on_hit" },
   { name: "Gravemeal", runes: ["vor", "vor", "kel"], slots: ["weapon"], bonus: { lifeSteal: 4, dmg: 8 }, effect: "bleed" },
-  { name: "Stormlaw", runes: ["zel", "zel", "karn"], slots: ["weapon"], bonus: { lightDmg: 16, crit: 5 }, effect: "lightning_storm" },
+  { name: "Stormlaw", runes: ["zel", "zel", "karn"], slots: ["weapon"], bonus: { lightDmg: 30, crit: 9 }, effect: "lightning_storm" },
   { name: "Hearthlight", runes: ["fyr", "vek", "mur"], slots: ["helm"], bonus: { maxHp: 15, maxMana: 15, fireRes: 15 } },
   { name: "Bulwark", runes: ["vek", "vek", "ghal"], slots: ["offhand"], bonus: { armor: 12, allRes: 8, thorns: 4 }, effect: "frost_armor" },
-  { name: "Winterking", runes: ["hym", "ghal", "skol"], slots: ["weapon"], bonus: { coldDmg: 18, dmgPct: 12 }, effect: "frostnova_on_hit" },
-  { name: "The Drought", runes: ["bren", "tor", "fyr"], slots: ["weapon"], bonus: { fireDmg: 20, dmgPct: 18, atkSpd: 8 }, effect: "corpse_explosion" },
-  { name: "Nightparish", runes: ["ghal", "vael", "hym"], slots: ["chest"], bonus: { allRes: 12, lifeSteal: 2, maxHp: 25 }, effect: "second_wind" },
-  { name: "Stonewill", runes: ["thurn", "vek", "ghal"], slots: ["helm"], bonus: { armor: 8, allRes: 6, maxHp: 18 }, effect: "mana_shield" },
-  { name: "Sanctum", runes: ["ulth", "ghal", "thurn"], slots: ["offhand"], bonus: { armor: 14, allRes: 14, maxHp: 20 }, effect: "aegis" },
-  { name: "Kingslayer", runes: ["drov", "karn", "kel", "rok"], slots: ["weapon"], bonus: { dmgPct: 30, crit: 8, dmg: 10 }, effect: "giantslayer" },
-  { name: "Thornparade", runes: ["thurn", "vael", "drov"], slots: ["chest"], bonus: { armor: 10, thorns: 8, dmgPct: 10 }, effect: "adrenaline" },
-  { name: "Worldsedge", runes: ["thurn", "drov", "ulth", "karn"], slots: ["weapon"], bonus: { dmgPct: 35, crit: 6, allRes: 8, dmg: 12 }, effect: "executioner" },
-  // the second book — armor gets its due, and two more four-socket grails for the deep
+  { name: "Winterking", runes: ["hym", "ghal", "skol"], slots: ["weapon"], bonus: { coldDmg: 34, dmgPct: 24 }, effect: "frostnova_on_hit" },
+  { name: "The Drought", runes: ["bren", "tor", "fyr"], slots: ["weapon"], bonus: { fireDmg: 34, dmgPct: 30, atkSpd: 12 }, effect: "immolation" },
+  { name: "Nightparish", runes: ["ghal", "vael", "hym"], slots: ["chest"], bonus: { allRes: 22, lifeSteal: 4, maxHp: 45 }, effect: "second_wind" },
+  { name: "Stonewill", runes: ["thurn", "vek", "ghal"], slots: ["helm"], bonus: { armor: 18, allRes: 12, maxHp: 35 }, effect: "mana_shield" },
+  { name: "Sanctum", runes: ["ulth", "ghal", "thurn"], slots: ["offhand"], bonus: { armor: 30, allRes: 24, maxHp: 40 }, effect: "aegis" },
+  { name: "Thornparade", runes: ["thurn", "vael", "drov"], slots: ["chest"], bonus: { armor: 22, thorns: 16, dmgPct: 20 }, effect: "adrenaline" },
+  // ── the second book: armor's due, and the strongest three-socket words ──
   { name: "Wardvigil", runes: ["zel", "hym", "ghal"], slots: ["helm"], bonus: { allRes: 10, maxMana: 20, dodge: 4 } },
   { name: "Mindspire", runes: ["kel", "zel", "mur"], slots: ["helm"], bonus: { maxMana: 30, manaRegen: 4, cdr: 8 }, effect: "arcane_surge" },
-  { name: "Ironbark", runes: ["thurn", "ghal", "vek"], slots: ["chest"], bonus: { armor: 14, maxHp: 30, thorns: 6 }, effect: "frost_armor" },
+  { name: "Ironbark", runes: ["thurn", "ghal", "vek"], slots: ["chest"], bonus: { armor: 28, maxHp: 55, thorns: 12 }, effect: "frost_armor" },
   { name: "Tidecaller", runes: ["hym", "mur", "kel"], slots: ["offhand"], bonus: { coldDmg: 12, maxMana: 20, allRes: 8 }, effect: "frostnova_on_hit" },
   { name: "Lightward", runes: ["zel", "ghal", "vek"], slots: ["offhand"], bonus: { lightRes: 20, armor: 8, cdr: 6 } },
-  { name: "Wyrmtongue", runes: ["fyr", "tor", "bren"], slots: ["weapon"], bonus: { fireDmg: 18, dmgPct: 16 }, effect: "immolation" },
-  { name: "Soulcinder", runes: ["vor", "kel", "zhar"], slots: ["weapon"], bonus: { dmg: 10, lifeSteal: 4, dmgPct: 14 }, effect: "corpse_explosion" },
-  { name: "Doomsayer", runes: ["karn", "drov", "thurn", "kel"], slots: ["weapon"], bonus: { dmgPct: 32, crit: 7, lifeSteal: 3, dmg: 12 }, effect: "executioner" },
-  { name: "Everstorm", runes: ["zel", "zhar", "karn", "vor"], slots: ["weapon"], bonus: { lightDmg: 22, dmgPct: 18, crit: 6 }, effect: "lightning_storm" },
-  { name: "Sanctuary", runes: ["ghal", "thurn", "ulth", "vek"], slots: ["chest"], bonus: { armor: 16, allRes: 16, maxHp: 30 }, effect: "aegis" },
+  { name: "Wyrmtongue", runes: ["fyr", "tor", "bren"], slots: ["weapon"], bonus: { fireDmg: 32, dmgPct: 28 }, effect: "immolation" },
+  { name: "Soulcinder", runes: ["vor", "kel", "zhar"], slots: ["weapon"], bonus: { dmg: 26, lifeSteal: 6, dmgPct: 26 }, effect: "corpse_explosion" },
+  // ── THE GRAILS: four deep sockets, epic-tier — the equal of any legend in the slot ──
+  { name: "Kingslayer", runes: ["drov", "karn", "kel", "rok"], slots: ["weapon"], bonus: { dmgPct: 55, crit: 16, dmg: 30 }, effect: "giantslayer" },
+  { name: "Doomsayer", runes: ["karn", "drov", "thurn", "kel"], slots: ["weapon"], bonus: { dmgPct: 60, crit: 12, lifeSteal: 6, dmg: 34 }, effect: "twin_strike" },
+  { name: "Everstorm", runes: ["zel", "zhar", "karn", "vor"], slots: ["weapon"], bonus: { lightDmg: 46, dmgPct: 42, crit: 12 }, effect: "stormlord", power: "chain_fork" },
+  { name: "Worldsedge", runes: ["thurn", "drov", "ulth", "karn"], slots: ["weapon"], bonus: { dmgPct: 70, crit: 14, dmg: 40, allRes: 12 }, effect: "culling", power: "whirl_rend" },
+  { name: "Sanctuary", runes: ["ghal", "thurn", "ulth", "vek"], slots: ["chest"], bonus: { armor: 40, allRes: 30, maxHp: 80 }, effect: "deathless" },
 ];
 
 export function matchRuneword(item: Pick<Item, "slot" | "sockets" | "runes" | "rarity">): Runeword | null {

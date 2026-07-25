@@ -20,6 +20,7 @@ import {
   MonsterKind,
   RARITY_COLORS,
   RARITY_ORDER,
+  runeRarity,
   FLOOR_THEMES,
   FOREST_THEME_INDEX,
   visualThemeFor,
@@ -316,6 +317,7 @@ export class GameScene extends Phaser.Scene {
     this.input.on(
       "wheel",
       (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+        if (this.ui?.codexVisible) return; // the Codex eats the wheel to scroll its grimoire
         const cam = this.cameras.main;
         cam.setZoom(Phaser.Math.Clamp(cam.zoom - dy * 0.001, 1.1, 2.2));
       }
@@ -3565,10 +3567,22 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const color = RARITY_COLORS[g.rarity as keyof typeof RARITY_COLORS] ?? 0xd0d0d0;
+    // the item itself, drawn as its icon when we have one
+    let base = "";
+    try {
+      base = JSON.parse(g.data)?.base ?? "";
+    } catch {
+      /* legacy/unknown item payload */
+    }
+
+    // runes carry a stored rarity of "magic", but read on the ground as a tier ladder
+    // (white → epic) by rune — so a deep-alphabet rune gets the same fanfare as good gear
+    const runeId = base.startsWith("rune_") ? base.slice(5) : "";
+    const effRarity = runeId ? runeRarity(runeId) : (g.rarity as keyof typeof RARITY_COLORS);
+    const color = RARITY_COLORS[effRarity as keyof typeof RARITY_COLORS] ?? 0xd0d0d0;
 
     // beam of light for rare and above — the moment that matters
-    const isBig = g.rarity !== "common" && g.rarity !== "magic";
+    const isBig = effRarity !== "common" && effRarity !== "magic";
 
     // every drop rests in a soft pool of its rarity's light (bloom makes it glow)
     const pool = this.add
@@ -3587,18 +3601,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     // the item itself, drawn as its icon when we have one
-    let base = "";
-    try {
-      base = JSON.parse(g.data)?.base ?? "";
-    } catch {
-      /* legacy/unknown item payload */
-    }
     if (base.startsWith("rune_")) {
       container.add(this.add.image(0, -10, "icon_runestone").setScale(0.65));
       container.add(
         this.add
           .text(0, -11, g.name.split(" ")[0], {
-            fontFamily: "monospace", fontSize: "8px", color: "#ffb066", fontStyle: "bold",
+            fontFamily: "monospace", fontSize: "8px", color: rarityColorStr(effRarity), fontStyle: "bold",
           })
           .setOrigin(0.5)
       );
@@ -3614,7 +3622,7 @@ export class GameScene extends Phaser.Scene {
       .text(0, -26, g.name, {
         fontFamily: "monospace",
         fontSize: "11px",
-        color: base.startsWith("rune_") ? "#ff8033" : rarityColorStr(g.rarity),
+        color: rarityColorStr(effRarity),
         backgroundColor: "#0c0c12dd",
         padding: { x: 4, y: 2 },
       })
@@ -3628,7 +3636,7 @@ export class GameScene extends Phaser.Scene {
 
     const me = this.room ? this.players.get(this.room.sessionId) : undefined;
     if (me && Math.hypot(me.schema.x - g.x, me.schema.y - g.y) < 700) {
-      this.sfx.drop(g.rarity);
+      this.sfx.drop(effRarity);
     }
   }
 
