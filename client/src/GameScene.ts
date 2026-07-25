@@ -198,6 +198,12 @@ export class GameScene extends Phaser.Scene {
 
   private mapTiles: Phaser.GameObjects.GameObject[] = [];
   private decorTweens: Phaser.Tweens.Tween[] = [];
+  // Per-frame particle pools. The trail ghosts are the reason these exist: one is born
+  // per moving projectile PER FRAME, so a fight with twenty in the air used to allocate
+  // and destroy ~1,200 game objects a second. Footstep dust and legendary embers are
+  // throttled and cheaper, but they come from the same two shapes, so they share.
+  private arcPool: Phaser.GameObjects.Arc[] = [];
+  private ellipsePool: Phaser.GameObjects.Ellipse[] = [];
   private hitStopUntil = 0; // brief world-freeze on your big hits — the "crunch" of impact
   // enterable buildings whose roof lifts away when someone steps inside (a Diablo cutaway)
   private cutaways: Array<{ b: TownBuilding; roof: Phaser.GameObjects.GameObject[]; alpha: number }> = [];
@@ -1648,6 +1654,7 @@ export class GameScene extends Phaser.Scene {
     this.stairsFx?.destroy();
     this.gore.forEach((g) => g.destroy()); // a new floor starts clean (briefly)
     this.gore = [];
+    this.clearParticlePools();
 
     const rmAct = this.room?.state.act ?? 1;
     const rmFloor = this.room?.state.floor ?? 1;
@@ -4236,6 +4243,63 @@ export class GameScene extends Phaser.Scene {
     this.skillReadyAt.set(skill.id, this.time.now + (skill.cooldownMs ?? 0));
   }
 
+  // --- particle pools ---
+  //
+  // Acquire a shape, tween it, and hand it back in the tween's onComplete instead of
+  // destroying it. Freeing only ever happens on completion, so a pooled object is never
+  // holding a live tween when it is handed out again.
+
+  private static readonly POOL_MAX = 256; // deep enough for a busy fight, bounded for memory
+
+  /** A circle from the pool (or a new one), reset to a known state. */
+  private takeArc(x: number, y: number, radius: number, color: number, fillAlpha: number, depth: number) {
+    const a = this.arcPool.pop();
+    if (!a) return this.add.circle(x, y, radius, color, fillAlpha).setDepth(depth);
+    a.setPosition(x, y);
+    a.setRadius(radius);
+    a.setFillStyle(color, fillAlpha);
+    // the tweens animate object alpha and scale — both must start from neutral
+    a.setAlpha(1);
+    a.setScale(1);
+    a.setDepth(depth);
+    a.setActive(true).setVisible(true);
+    return a;
+  }
+
+  private freeArc(a: Phaser.GameObjects.Arc) {
+    if (this.arcPool.length >= GameScene.POOL_MAX) return void a.destroy();
+    a.setActive(false).setVisible(false);
+    this.arcPool.push(a);
+  }
+
+  /** An ellipse from the pool (or a new one), reset to a known state. */
+  private takeEllipse(x: number, y: number, w: number, h: number, color: number, fillAlpha: number, depth: number) {
+    const e = this.ellipsePool.pop();
+    if (!e) return this.add.ellipse(x, y, w, h, color, fillAlpha).setDepth(depth);
+    e.setPosition(x, y);
+    e.setSize(w, h);
+    e.setFillStyle(color, fillAlpha);
+    e.setAlpha(1);
+    e.setScale(1);
+    e.setDepth(depth);
+    e.setActive(true).setVisible(true);
+    return e;
+  }
+
+  private freeEllipse(e: Phaser.GameObjects.Ellipse) {
+    if (this.ellipsePool.length >= GameScene.POOL_MAX) return void e.destroy();
+    e.setActive(false).setVisible(false);
+    this.ellipsePool.push(e);
+  }
+
+  /** A new floor starts clean: pooled shapes belong to the scene, not the level. */
+  private clearParticlePools() {
+    this.arcPool.forEach((a) => a.destroy());
+    this.ellipsePool.forEach((e) => e.destroy());
+    this.arcPool = [];
+    this.ellipsePool = [];
+  }
+
   // --- frame loop ---
 
   update(_time: number, delta: number) {
@@ -4301,15 +4365,20 @@ export class GameScene extends Phaser.Scene {
       if (tier >= 5 && ent.schema.hp > 0 && this.time.now - (ent.lastEmberAt ?? 0) > 340) {
         ent.lastEmberAt = this.time.now;
         const color = RARITY_COLORS[RARITY_ORDER[tier]] ?? 0xff8033;
-        const ember = this.add
-          .circle(ent.container.x + (Math.random() * 2 - 1) * 10, ent.container.y - 6 - Math.random() * 14, 1.6, color, 0.85)
-          .setDepth(ent.container.depth + 1);
+        const ember = this.takeArc(
+          ent.container.x + (Math.random() * 2 - 1) * 10,
+          ent.container.y - 6 - Math.random() * 14,
+          1.6,
+          color,
+          0.85,
+          ent.container.depth + 1
+        );
         this.tweens.add({
           targets: ember,
           y: ember.y - 16 - Math.random() * 10,
           alpha: 0,
           duration: 700 + Math.random() * 300,
-          onComplete: () => ember.destroy(),
+          onComplete: () => this.freeArc(ember),
         });
       }
 
@@ -4339,10 +4408,8 @@ export class GameScene extends Phaser.Scene {
       // footstep dust while moving
       if (moved > 1.5 && this.time.now - (ent.lastStepAt ?? 0) > 190 && ent.schema.hp > 0) {
         ent.lastStepAt = this.time.now;
-        const dust = this.add
-          .ellipse(ent.container.x, ent.container.y + 2, 9, 4, 0x9a9aa8, 0.22)
-          .setDepth(ent.container.depth - 1);
-        this.tweens.add({ targets: dust, alpha: 0, scaleX: 1.7, duration: 420, onComplete: () => dust.destroy() });
+        const dust = this.takeEllipse(ent.container.x, ent.container.y + 2, 9, 4, 0x9a9aa8, 0.22, ent.container.depth - 1);
+        this.tweens.add({ targets: dust, alpha: 0, scaleX: 1.7, duration: 420, onComplete: () => this.freeEllipse(dust) });
       }
       ent.prevX = ent.container.x;
       ent.prevY = ent.container.y;
@@ -4392,10 +4459,8 @@ export class GameScene extends Phaser.Scene {
       if (ent.rotatable && (dx !== 0 || dy !== 0)) ent.rotatable.setRotation(Math.atan2(dy, dx));
       // a glowing streak smeared through the air — drop a fading ghost when it's moving
       if (!frozen && ent.trailColor !== undefined && (dx * dx + dy * dy) > 9) {
-        const ghost = this.add
-          .circle(ent.container.x, ent.container.y - 12, 3, ent.trailColor, 0.5)
-          .setDepth(ent.container.depth - 1);
-        this.tweens.add({ targets: ghost, alpha: 0, scale: 0.3, duration: 190, onComplete: () => ghost.destroy() });
+        const ghost = this.takeArc(ent.container.x, ent.container.y - 12, 3, ent.trailColor, 0.5, ent.container.depth - 1);
+        this.tweens.add({ targets: ghost, alpha: 0, scale: 0.3, duration: 190, onComplete: () => this.freeArc(ghost) });
       }
       ent.lastX = ent.container.x;
       ent.lastY = ent.container.y;
