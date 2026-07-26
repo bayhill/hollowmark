@@ -9,6 +9,10 @@
 // that is what left the town guitar ringing over the dungeon for ten seconds.
 type Bus = { dry: AudioNode; wet: AudioNode | null };
 
+// One thing a floor can say, and roughly how often (seconds). Only a midpoint —
+// scheduleVoice scatters each firing so the floor never keeps time.
+type AmbientVoice = { every: number; play: () => void };
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private noiseBuf: AudioBuffer | null = null;
@@ -287,6 +291,251 @@ export class Sfx {
     this.noise(0.5, 200, "lowpass", 0.03, undefined, bus); // a thud beneath it
   }
 
+  // ============================================================
+  // --- the vocabulary of a place: what a floor says when nothing is happening ---
+  // A floor now has to carry itself on these alone, so there are enough of them per
+  // palette that you can't learn the list, and each runs on its own clock (see
+  // scheduleVoice) so they never settle into a rhythm you can anticipate.
+  // ============================================================
+
+  /** Put a voice somewhere in the stereo field. A sound that comes from a direction
+   *  reads as a place; a sound in the middle of your head reads as a sound effect. */
+  private place(bus: Bus | undefined, pan: number, ttlS: number): Bus | undefined {
+    if (!bus || !this.ctx) return bus;
+    const p = this.ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    p.connect(bus.dry);
+    // let it go once the voice has finished, or panners pile up on a long floor
+    setTimeout(() => { try { p.disconnect(); } catch { /* already gone */ } }, (ttlS + 1) * 1000);
+    return { dry: p, wet: bus.wet };
+  }
+
+  /** somewhere off to one side, but not hard-panned — that just sounds broken on headphones */
+  private off() { return (Math.random() * 2 - 1) * 0.75; }
+
+  /** a swell of filtered noise: wind, or the room drawing breath */
+  private gust(bus: Bus | undefined, dur: number, freq: number, gain: number, pan = this.off()) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.getNoiseBuf();
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.Q.value = 0.8;
+    f.frequency.setValueAtTime(freq * 0.7, now);
+    f.frequency.linearRampToValueAtTime(freq * 1.3, now + dur * 0.45);
+    f.frequency.linearRampToValueAtTime(freq * 0.6, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(gain, now + dur * 0.4); // wind arrives, it doesn't start
+    g.gain.linearRampToValueAtTime(0.0001, now + dur);
+    src.connect(f).connect(g);
+    this.toOut(g, 0.4, this.place(bus, pan, dur));
+    src.start(now);
+    src.stop(now + dur + 0.05);
+  }
+
+  /** distance is 0 (overhead, with a crack) to 1 (a long way off, all rumble) */
+  private thunder(bus: Bus | undefined, distance = Math.random()) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const dur = 2.2 + distance * 3.5; // far thunder rolls for much longer
+    const pan = this.off() * 0.6;
+    const near = 1 - distance;
+    // the body: low noise through a filter that closes as the sound travels to you
+    const src = ctx.createBufferSource();
+    src.buffer = this.getNoiseBuf();
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(70 + near * 260, now);
+    f.frequency.exponentialRampToValueAtTime(45, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.05 + near * 0.06, now + 0.12 + distance * 0.5);
+    // two-stage decay — thunder falls away and then keeps grumbling
+    g.gain.linearRampToValueAtTime(0.02 + near * 0.02, now + dur * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(f).connect(g);
+    this.toOut(g, 0.9, this.place(bus, pan, dur));
+    src.start(now);
+    src.stop(now + dur + 0.05);
+    // close strikes get the crack that arrives before the roll
+    if (distance < 0.35) this.noise(0.11, 2200, "highpass", 0.03 * near, 600, this.place(bus, pan, 0.2));
+  }
+
+  /** two soft hoots, the second lower — an owl that has already seen you */
+  private owl(bus: Bus | undefined) {
+    const pan = this.off();
+    const base = 380 + Math.random() * 90;
+    const hoot = (f: number, at: number, gain: number) =>
+      setTimeout(() => this.tone(f, f * 0.94, 0.42, "sine", gain, this.place(bus, pan, 0.5)), at);
+    hoot(base, 0, 0.016);
+    hoot(base * 0.88, 620, 0.013);
+  }
+
+  /** a bird that calls once and thinks better of it */
+  private nightBird(bus: Bus | undefined) {
+    const pan = this.off();
+    const f = 1100 + Math.random() * 800;
+    this.tone(f, f * 1.15, 0.07, "sine", 0.012, this.place(bus, pan, 0.1));
+    setTimeout(() => this.tone(f * 1.1, f * 0.9, 0.06, "sine", 0.009, this.place(bus, pan, 0.1)), 130);
+  }
+
+  /** old wood taking its time — a slow creak with the wobble of something under load */
+  private creak(bus: Bus | undefined) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const dur = 0.9 + Math.random() * 0.8;
+    const pan = this.off();
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    const base = 95 + Math.random() * 60;
+    o.frequency.setValueAtTime(base, now);
+    o.frequency.linearRampToValueAtTime(base * 1.35, now + dur); // the strain rising
+    const wob = ctx.createOscillator(); // the stick-slip judder that makes it read as wood
+    wob.frequency.value = 11 + Math.random() * 7;
+    const wobG = ctx.createGain();
+    wobG.gain.value = base * 0.09;
+    wob.connect(wobG).connect(o.frequency);
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 420;
+    f.Q.value = 4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.013, now + dur * 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    o.connect(f).connect(g);
+    this.toOut(g, 0.5, this.place(bus, pan, dur));
+    o.start(now); wob.start(now);
+    o.stop(now + dur + 0.05); wob.stop(now + dur + 0.05);
+  }
+
+  /** leaves, or dry things moving over each other */
+  private rustle(bus: Bus | undefined, gain = 0.014) {
+    this.noise(0.35 + Math.random() * 0.4, 2600, "highpass", gain, 1400, this.place(bus, this.off(), 0.8));
+  }
+
+  /** one drop, and the room it fell in */
+  private drip(bus: Bus | undefined) {
+    const pan = this.off();
+    const f = 1200 + Math.random() * 900;
+    this.tone(f, f * 0.55, 0.07, "sine", 0.022, this.place(bus, pan, 0.15));
+  }
+
+  /** the building shifting its weight */
+  private settle(bus: Bus | undefined) {
+    const pan = this.off() * 0.5;
+    this.noise(1.4, 90, "lowpass", 0.035, 50, this.place(bus, pan, 1.5));
+    setTimeout(() => this.rustle(bus, 0.006), 700); // dust coming down after
+  }
+
+  /** metal on stone, a few links at a time */
+  private chains(bus: Bus | undefined) {
+    const pan = this.off();
+    const n = 3 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        const f = 2400 + Math.random() * 1800;
+        this.tone(f, f * 0.8, 0.05, "square", 0.006, this.place(bus, pan, 0.1));
+      }, i * (70 + Math.random() * 120));
+    }
+  }
+
+  /** a heavy door, somewhere you haven't been */
+  private farDoor(bus: Bus | undefined) {
+    const pan = this.off();
+    this.creak(bus);
+    setTimeout(() => this.noise(0.7, 110, "lowpass", 0.04, 60, this.place(bus, pan, 0.8)), 1100);
+  }
+
+  /** not a scream — something big, unhurried, announcing itself down a corridor */
+  private howl(bus: Bus | undefined, intensity = 0.7) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.8 + Math.random() * 1.2;
+    const pan = this.off();
+    const base = 90 + Math.random() * 50;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(base, now);
+    o.frequency.linearRampToValueAtTime(base * 1.6, now + dur * 0.35);
+    o.frequency.linearRampToValueAtTime(base * 0.8, now + dur);
+    const f = ctx.createBiquadFilter(); // a throat, roughly
+    f.type = "bandpass";
+    f.frequency.setValueAtTime(320, now);
+    f.frequency.linearRampToValueAtTime(700, now + dur * 0.4);
+    f.frequency.linearRampToValueAtTime(260, now + dur);
+    f.Q.value = 2.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.02 * intensity, now + dur * 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    o.connect(f).connect(g);
+    this.toOut(g, 0.9, this.place(bus, pan, dur));
+    o.start(now);
+    o.stop(now + dur + 0.05);
+  }
+
+  /** voices in unison that stop the moment you notice them */
+  private chant(bus: Bus | undefined) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.6 + Math.random() * 1.4;
+    const pan = this.off() * 0.4;
+    const root = 130 + Math.random() * 40;
+    const placed = this.place(bus, pan, dur);
+    for (const mult of [1, 1.5, 2]) { // a bare open voicing — plainsong, not harmony
+      const o = ctx.createOscillator();
+      o.type = "triangle";
+      o.frequency.value = root * mult * (1 + (Math.random() - 0.5) * 0.006); // human, not tuned
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.009 / mult, now + dur * 0.5);
+      g.gain.setValueAtTime(0.009 / mult, now + dur * 0.92);
+      g.gain.linearRampToValueAtTime(0.0001, now + dur); // cut, not faded — they stopped
+      o.connect(g);
+      this.toOut(g, 0.95, placed);
+      o.start(now);
+      o.stop(now + dur + 0.05);
+    }
+  }
+
+  /** something wet turning over */
+  private bubble(bus: Bus | undefined) {
+    const pan = this.off();
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        const f = 110 + Math.random() * 130;
+        this.tone(f, f * 2.4, 0.13, "sine", 0.014, this.place(bus, pan, 0.2));
+      }, i * (110 + Math.random() * 190));
+    }
+  }
+
+  /** embers, grit, the air itself carrying particles */
+  private cinders(bus: Bus | undefined) {
+    const n = 4 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => this.noise(0.06, 3400 + Math.random() * 1600, "highpass", 0.007,
+        undefined, this.place(bus, this.off(), 0.1)), i * (60 + Math.random() * 140));
+    }
+  }
+
+  /** ice under pressure, deciding whether to give */
+  private iceCrack(bus: Bus | undefined) {
+    const pan = this.off();
+    this.noise(0.09, 1800, "bandpass", 0.02, 320, this.place(bus, pan, 0.15));
+    setTimeout(() => this.tone(2400, 1900, 0.5, "sine", 0.008, this.place(bus, pan, 0.6)), 60);
+  }
+
   // --- ambient soundscape, one per depth band ---
 
   private ambientNodes: AudioNode[] = [];
@@ -305,8 +554,31 @@ export class Sfx {
   private bedWet: GainNode | null = null;
   private static readonly BED_FADE = 0.7; // seconds — long enough to read as a dissolve
 
+  // Each ambient voice re-arms itself on its own jittered clock, so it needs a way to be
+  // called off. `bedGen` fences callbacks that were already in flight when the floor
+  // changed; the cancels clear whatever is still pending.
+  private bedGen = 0;
+  private ambientCancels: Array<() => void> = [];
+
   private bedBus(): Bus | undefined {
     return this.bedDry ? { dry: this.bedDry, wet: this.bedWet } : undefined;
+  }
+
+  /** Give one voice its own clock. A shared interval is what makes a soundscape read as
+   *  a loop — even at these volumes the ear finds the grid and stops believing the place.
+   *  Each voice re-arms itself with ±50% scatter instead, and `gen` fences it so a
+   *  callback in flight when the floor changed can't resurrect the old bed. */
+  private scheduleVoice(gen: number, everyS: number, play: () => void) {
+    let h: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      h = setTimeout(() => {
+        if (this.bedGen !== gen || !this.ctx || !this.ambientEnabled) return;
+        play();
+        arm();
+      }, everyS * 1000 * (0.5 + Math.random()));
+    };
+    arm();
+    this.ambientCancels.push(() => clearTimeout(h));
   }
 
   // the lobby's impending-doom drums live outside the depth-based ambient system
@@ -338,8 +610,12 @@ export class Sfx {
   // — it can only be turned down. Ramping the taps silences it; the teardown afterwards
   // orphans whatever is still scheduled so it plays out into nothing.
   private stopAmbient(fadeS = Sfx.BED_FADE) {
+    this.stopBossDrums(); // the drums belong to the floor you left
+    this.bedGen++; // anything already in flight is now stale
     this.ambientTimers.forEach((t) => clearInterval(t));
     this.ambientTimers = [];
+    this.ambientCancels.forEach((c) => c());
+    this.ambientCancels = [];
     const nodes = this.ambientNodes;
     this.ambientNodes = [];
     this.ambientTheme = -1;
@@ -371,7 +647,8 @@ export class Sfx {
     if (!this.ctx || !this.ambientEnabled) return;
     this.stopLobbyTheme(); // the depth bed and the lobby drums never play together
     if (!force && this.ambientTheme === themeIdx) return;
-    this.stopAmbient();
+    this.stopAmbient(); // bumps bedGen — capture it after, so our voices are the live ones
+    const gen = this.bedGen;
     this.ambientTheme = themeIdx;
     const ctx = this.ctx;
 
@@ -491,140 +768,217 @@ export class Sfx {
       return;
     }
 
-    // every dungeon has its own key: a drone bed and its own vocabulary of events.
-    // No melody down here — a recurring phrase is the one thing in the mix that can't
-    // help but sound authored, and withholding it is what makes town mean something.
-    let event: () => void;
+    // Every dungeon has its own key and its own vocabulary. No melody down here — a
+    // recurring phrase is the one thing in the mix that can't help but sound authored,
+    // and withholding it is what makes walking back into town mean something.
+    //
+    // Each palette lists the things its floor can say and roughly how often. Indoor
+    // places speak in stone, dust, water and old metal; open ones get weather, wind and
+    // birds. `every` is seconds, and only a midpoint — scheduleVoice scatters it.
+    let voices: AmbientVoice[];
     switch (themeIdx) {
-      case 1: // catacombs: cold hollow drone, wind, distant moans
+      case 1: // catacombs: cold hollow stone, and the dead filed in the walls
         drone(45, "triangle", 0.5);
         noiseBed(220, 0.22);
-        event = () => this.tone(115, 70, 1.4, "sine", 0.018, bus);
+        voices = [
+          { every: 9, play: () => this.drip(bus) },
+          { every: 15, play: () => this.tone(115, 70, 1.4, "sine", 0.018, this.place(bus, this.off(), 1.5)) },
+          { every: 19, play: () => this.rustle(bus) }, // grave cloth
+          { every: 26, play: () => this.settle(bus) },
+          { every: 34, play: () => this.chains(bus) },
+          { every: 47, play: () => this.chant(bus) },
+          { every: 61, play: () => this.farDoor(bus) },
+        ];
         break;
-      case 2: // caves: earth rumble and dripping water
+      case 2: // caves: earth rumble, water finding its way down
         drone(38, "sine", 0.35);
         noiseBed(150, 0.5);
-        event = () => this.tone(1400, 900, 0.07, "sine", 0.03, bus);
+        voices = [
+          { every: 6, play: () => this.drip(bus) },
+          { every: 22, play: () => this.settle(bus) },
+          { every: 25, play: () => this.rustle(bus) },
+          { every: 30, play: () => this.gust(bus, 3.4, 260, 0.02) }, // air through a passage
+          { every: 33, play: () => this.scuttle(bus) },
+          { every: 38, play: () => this.bubble(bus) },
+        ];
         break;
-      case 3: // hell: grinding saw drone, deep rumbles
+      case 3: // hell: grinding saw drone, and things that are not hiding
         drone(40, "sawtooth", 0.32);
         noiseBed(120, 0.35);
-        event = () => this.noise(0.9, 90, "lowpass", 0.05, undefined, bus);
+        voices = [
+          { every: 12, play: () => this.cinders(bus) },
+          { every: 17, play: () => this.noise(0.9, 90, "lowpass", 0.05, undefined, this.place(bus, this.off() * 0.5, 1)) },
+          { every: 21, play: () => this.howl(bus, 0.85) },
+          { every: 26, play: () => this.gust(bus, 3.8, 420, 0.026) }, // firestorm, somewhere
+          { every: 37, play: () => this.distantScream(0.6, bus) },
+          { every: 44, play: () => this.chant(bus) },
+        ];
         break;
-      case 4: // frozen: glassy high shimmer, crystalline pings
+      case 4: // frozen: glassy shimmer, ice deciding whether to hold
         drone(66, "sine", 0.4);
         drone(66.5, "sine", 0.14); // was a bare fifth; now it just beats against itself
         noiseBed(3000, 0.06);
-        event = () => this.tone(1760, 1750, 0.6, "sine", 0.014, bus);
+        voices = [
+          { every: 13, play: () => this.iceCrack(bus) },
+          { every: 18, play: () => this.gust(bus, 4.2, 1600, 0.022) },
+          { every: 20, play: () => this.tone(1760, 1750, 0.6, "sine", 0.014, this.place(bus, this.off(), 0.7)) },
+          { every: 24, play: () => this.drip(bus) },
+          { every: 31, play: () => this.rustle(bus, 0.009) }, // snow off a ledge
+          { every: 40, play: () => this.settle(bus) },
+        ];
         break;
       case 5: // sanguine: a slow heartbeat under pressure
         drone(52, "sine", 0.42);
         drone(52.4, "sine", 0.15); // was a minor third — too close to a chord to ignore
-        event = () => {
-          this.tone(58, 50, 0.14, "sine", 0.06, bus); // lub
-          setTimeout(() => this.tone(52, 46, 0.12, "sine", 0.05, bus), 220); // dub
-        };
+        voices = [
+          { every: 11, play: () => {
+            this.tone(58, 50, 0.14, "sine", 0.06, bus); // lub
+            setTimeout(() => this.tone(52, 46, 0.12, "sine", 0.05, bus), 220); // dub
+          } },
+          { every: 17, play: () => this.drip(bus) },
+          { every: 29, play: () => this.breath(bus) },
+          { every: 35, play: () => this.settle(bus) },
+          { every: 40, play: () => this.chant(bus) },
+          { every: 52, play: () => this.howl(bus, 0.6) },
+        ];
         break;
-      case 6: // swamp: croaks, bubbles, a waterlogged bass
+      case 6: // swamp: standing water, and everything living in it
         drone(42, "triangle", 0.4);
         noiseBed(300, 0.3);
-        event = () => this.tone(90 + Math.random() * 60, 70, 0.18, "square", 0.02, bus);
+        voices = [
+          { every: 11, play: () => this.bubble(bus) },
+          { every: 11, play: () => this.tone(90 + Math.random() * 60, 70, 0.18, "square", 0.02, this.place(bus, this.off(), 0.2)) },
+          { every: 14, play: () => this.rustle(bus) },
+          { every: 19, play: () => this.nightBird(bus) },
+          { every: 24, play: () => this.gust(bus, 3.2, 700, 0.016) },
+          { every: 27, play: () => this.owl(bus) },
+          { every: 55, play: () => this.thunder(bus, 0.6 + Math.random() * 0.4) },
+        ];
         break;
-      case 7: // void: near-silence, detuned beating, wrong intervals
+      case 7: // void: near-silence, and the few things that reach it
         drone(48, "sine", 0.35);
         drone(48.7, "sine", 0.35); // beats against itself — unease by physics
-        event = () => this.tone(1046, 1044, 1.8, "sine", 0.008, bus);
+        voices = [
+          // deliberately sparse: the void's whole character is how little it offers
+          { every: 26, play: () => this.tone(1046, 1044, 1.8, "sine", 0.008, this.place(bus, this.off(), 2)) },
+          { every: 34, play: () => this.whisper(0.6, bus) },
+          { every: 43, play: () => this.gust(bus, 5, 300, 0.014) }, // wind with nothing to blow through
+          { every: 58, play: () => this.chant(bus) },
+        ];
         break;
       case 8: // the abyss: sub-bass pressure, whispers at the edge of hearing
         drone(31, "sine", 0.55);
         drone(31.4, "sine", 0.3); // beat frequency: the walls breathe
         noiseBed(180, 0.2);
-        event = () => this.noise(0.5, 480, "bandpass", 0.02, undefined, bus); // something whispered
+        voices = [
+          { every: 14, play: () => this.noise(0.5, 480, "bandpass", 0.02, undefined, this.place(bus, this.off(), 0.6)) },
+          { every: 18, play: () => this.drip(bus) },
+          { every: 21, play: () => this.settle(bus) },
+          { every: 33, play: () => this.howl(bus, 0.9) },
+          { every: 40, play: () => this.breath(bus) },
+          { every: 49, play: () => this.chant(bus) },
+        ];
         break;
-      case 9: // forest: wind through leaves, a crow somewhere, uneasy pastoral
+      case 9: // forest: wind through leaves, and whatever is awake out there
         drone(58, "triangle", 0.3);
         noiseBed(900, 0.16); // the canopy hushing
-        event = () => {
-          if (Math.random() < 0.5) {
-            // a crow that saw something
-            this.tone(620, 480, 0.09, "square", 0.012, bus);
-            setTimeout(() => this.tone(590, 460, 0.08, "square", 0.01, bus), 180);
-          } else {
-            this.tone(330, 328, 1.2, "sine", 0.008, bus); // wind singing in a dead tree
-          }
-        };
+        voices = [
+          { every: 12, play: () => this.rustle(bus) },
+          { every: 16, play: () => this.nightBird(bus) },
+          { every: 15, play: () => this.gust(bus, 4, 1100, 0.02) },
+          { every: 17, play: () => this.owl(bus) },
+          { every: 23, play: () => this.creak(bus) },
+          { every: 26, play: () => { // a crow that saw something
+            const pan = this.off();
+            this.tone(620, 480, 0.09, "square", 0.012, this.place(bus, pan, 0.15));
+            setTimeout(() => this.tone(590, 460, 0.08, "square", 0.01, this.place(bus, pan, 0.15)), 180);
+          } },
+          { every: 48, play: () => this.thunder(bus, 0.5 + Math.random() * 0.5) },
+        ];
         break;
-      case 10: // sunscar wastes: dry wind, heat shimmer, something circling
+      case 10: // sunscar wastes: dry wind, heat, something circling
         drone(52, "triangle", 0.28);
         noiseBed(1400, 0.12); // wind over hardpan
-        event = () => {
-          if (Math.random() < 0.4) {
-            this.tone(880, 640, 0.5, "sine", 0.007, bus); // a vulture's distant keen
-          } else {
-            this.noise(0.5, 1800, "highpass", 0.015, undefined, bus); // sand hissing across stone
-          }
-        };
+        voices = [
+          { every: 11, play: () => this.gust(bus, 4.6, 1900, 0.024) },
+          { every: 14, play: () => this.noise(0.5, 1800, "highpass", 0.015, undefined, this.place(bus, this.off(), 0.6)) },
+          { every: 20, play: () => this.rustle(bus, 0.01) },
+          { every: 24, play: () => this.tone(880, 640, 0.5, "sine", 0.007, this.place(bus, this.off(), 0.6)) }, // a vulture's keen
+          { every: 37, play: () => this.settle(bus) },
+          { every: 52, play: () => this.thunder(bus, 0.7 + Math.random() * 0.3) }, // a dry storm, never arriving
+        ];
         break;
       case 11: // the tombs: dead air, dust, the shift of old cloth
         drone(42, "sine", 0.42);
         noiseBed(180, 0.28);
-        event = () => {
-          if (Math.random() < 0.5) {
-            this.noise(0.35, 900, "bandpass", 0.02, undefined, bus); // cloth dragging over stone
-          } else {
-            this.tone(98, 96, 1.6, "sine", 0.012, bus); // a sarcophagus settling
-          }
-        };
+        voices = [
+          { every: 15, play: () => this.noise(0.35, 900, "bandpass", 0.02, undefined, this.place(bus, this.off(), 0.4)) },
+          { every: 21, play: () => this.tone(98, 96, 1.6, "sine", 0.012, this.place(bus, this.off() * 0.5, 1.7)) }, // a sarcophagus settling
+          { every: 27, play: () => this.drip(bus) },
+          { every: 29, play: () => this.chains(bus) },
+          { every: 34, play: () => this.scuttle(bus) },
+          { every: 44, play: () => this.chant(bus) },
+          { every: 58, play: () => this.farDoor(bus) },
+        ];
         break;
       case 12: // the drowned green: rain on leaves, river, unseen birds
         drone(60, "triangle", 0.26);
         noiseBed(1100, 0.2); // the canopy dripping
-        event = () => {
-          if (Math.random() < 0.5) {
-            this.tone(1240, 1180, 0.06, "sine", 0.014, bus); // something bright calls once
-            setTimeout(() => this.tone(1350, 1240, 0.05, "sine", 0.01, bus), 140);
-          } else {
-            this.tone(220, 218, 1.4, "sine", 0.009, bus); // the river under everything
-          }
-        };
+        voices = [
+          { every: 10, play: () => this.drip(bus) },
+          { every: 14, play: () => this.rustle(bus) },
+          { every: 15, play: () => this.nightBird(bus) },
+          { every: 19, play: () => this.tone(220, 218, 1.4, "sine", 0.009, this.place(bus, this.off() * 0.4, 1.5)) }, // the river under everything
+          { every: 21, play: () => this.bubble(bus) },
+          { every: 26, play: () => this.gust(bus, 3.6, 900, 0.016) },
+          { every: 45, play: () => this.thunder(bus, 0.4 + Math.random() * 0.5) },
+        ];
         break;
       case 13: // the ziggurat: flooded stone, deep hum, dripping altars
         drone(36, "sine", 0.44);
         noiseBed(300, 0.3);
-        event = () => {
-          if (Math.random() < 0.6) {
-            this.tone(1600, 1000, 0.08, "sine", 0.026, bus); // a drop into deep water
-          } else {
-            this.tone(73, 72, 2.0, "sine", 0.014, bus); // the god turning over in its sleep
-          }
-        };
+        voices = [
+          { every: 6, play: () => this.tone(1600, 1000, 0.08, "sine", 0.026, this.place(bus, this.off(), 0.2)) }, // a drop into deep water
+          { every: 18, play: () => this.bubble(bus) },
+          { every: 25, play: () => this.settle(bus) },
+          { every: 33, play: () => this.gust(bus, 4, 380, 0.018) },
+          { every: 38, play: () => this.chant(bus) },
+          { every: 47, play: () => this.tone(73, 72, 2.0, "sine", 0.014, this.place(bus, this.off() * 0.3, 2.1)) }, // the god turning over
+        ];
         break;
       case 14: // the ashfall road: cinders, far-off collapse, the breach breathing
         drone(38, "sawtooth", 0.24);
         drone(55.4, "sine", 0.18); // a fifth, pulled flat — keeps the body, loses the chord
         noiseBed(500, 0.22);
-        event = () => {
-          if (Math.random() < 0.5) {
-            this.noise(1.1, 70, "lowpass", 0.045, undefined, bus); // something enormous falling, far away
-          } else {
-            this.tone(150, 90, 0.7, "sawtooth", 0.012, bus); // the breach exhaling
-          }
-        };
+        voices = [
+          { every: 9, play: () => this.cinders(bus) },
+          { every: 15, play: () => this.gust(bus, 4.4, 800, 0.022) },
+          { every: 19, play: () => this.noise(1.1, 70, "lowpass", 0.045, undefined, this.place(bus, this.off() * 0.6, 1.2)) }, // something enormous falling
+          { every: 23, play: () => this.tone(150, 90, 0.7, "sawtooth", 0.012, this.place(bus, this.off() * 0.4, 0.8)) }, // the breach exhaling
+          { every: 34, play: () => this.thunder(bus, 0.2 + Math.random() * 0.4) },
+          { every: 41, play: () => this.howl(bus, 0.75) },
+          { every: 50, play: () => this.creak(bus) },
+        ];
         break;
-      default: // cathedral: low organ-ish hum, distant bell
+      default: // cathedral: low organ-ish hum, and a congregation long gone
         drone(55, "sine", 0.5);
         drone(82.5, "sine", 0.18);
-        event = () => this.tone(523, 522, 2.2, "sine", 0.012, bus);
+        voices = [
+          { every: 20, play: () => this.drip(bus) },
+          { every: 24, play: () => this.tone(523, 522, 2.2, "sine", 0.012, this.place(bus, this.off() * 0.4, 2.3)) }, // a distant bell
+          { every: 26, play: () => this.rustle(bus) },
+          { every: 28, play: () => this.settle(bus) },
+          { every: 33, play: () => this.chant(bus) },
+          { every: 55, play: () => this.farDoor(bus) },
+        ];
         break;
     }
 
-    // the further you've fallen, the more often the dark speaks up
+    // The further you've fallen, the less time the floor gives you between its noises —
+    // but only a little. The creep layer below is what actually escalates with depth; if
+    // the bed crowds in at the same rate, the two compound into noise.
     const creep = this.creep;
-    this.ambientTimers.push(
-      setInterval(() => {
-        if (this.ctx && Math.random() < 0.5 + creep * 0.35) event();
-      }, Math.round(8000 - creep * 3500)) // 8s near the surface → ~4.5s in the deep
-    );
+    for (const v of voices) this.scheduleVoice(gen, v.every * (1 - creep * 0.2), v.play);
     // the deep listens back — a separate layer of creeping horror that only wakes
     // once you're past the surface, and grows more frequent and more overt with depth.
     if (creep > 0.06) {
@@ -820,6 +1174,107 @@ export class Sfx {
         try { n.disconnect(); } catch { /* already gone */ }
       });
     }, 700);
+  }
+
+  // ============================================================
+  // --- boss drums: the one thing allowed to play over a dungeon ---
+  // The floors hold back melody entirely, which leaves nothing to shift into when
+  // something enormous notices you. Percussion is the way out: drums read as a war camp
+  // rather than a score, so they raise the stakes without breaking the rule. No pitched
+  // material here on purpose — a drum and a low swell, and that is all.
+  // ============================================================
+
+  private bossNodes: AudioNode[] = [];
+  private bossTimers: Array<ReturnType<typeof setInterval>> = [];
+  private bossFader: GainNode | null = null;
+  private bossOn = false;
+  private static readonly BOSS_FADE = 1.4; // they arrive, they don't switch on
+
+  startBossDrums() {
+    if (!this.ctx || this.bossOn) return;
+    this.bossOn = true;
+    const ctx = this.ctx;
+    this.ensureReverb();
+    const now = ctx.currentTime;
+
+    const fader = ctx.createGain();
+    fader.gain.setValueAtTime(0.0001, now);
+    fader.gain.linearRampToValueAtTime(1, now + Sfx.BOSS_FADE);
+    fader.connect(ctx.destination);
+    if (this.reverbSend) {
+      const send = ctx.createGain();
+      send.gain.value = 0.3; // a hall around them, but they stay in front of it
+      fader.connect(send).connect(this.reverbSend);
+      this.bossNodes.push(send);
+    }
+    this.bossFader = fader;
+    this.bossNodes.push(fader);
+
+    const master = ctx.createGain();
+    master.gain.value = 0.3; // under the gameplay SFX — pressure, not a wall
+    master.connect(fader);
+    this.bossNodes.push(master);
+
+    // a low non-pitched swell breathing under the kit, so the drums have something to sit on
+    const bedSrc = ctx.createBufferSource();
+    bedSrc.buffer = this.getNoiseBuf();
+    bedSrc.loop = true;
+    const bedF = ctx.createBiquadFilter();
+    bedF.type = "lowpass";
+    bedF.frequency.value = 95;
+    const bedG = ctx.createGain();
+    bedG.gain.value = 0.5;
+    const swell = ctx.createOscillator(); // slow, so it never becomes a pulse of its own
+    swell.frequency.value = 0.14;
+    const swellG = ctx.createGain();
+    swellG.gain.value = 0.22;
+    swell.connect(swellG).connect(bedG.gain);
+    bedSrc.connect(bedF).connect(bedG).connect(master);
+    bedSrc.start(now);
+    swell.start(now);
+    this.bossNodes.push(bedSrc, bedF, bedG, swell, swellG);
+
+    // Faster and heavier than the lobby march: a driving four with the floor tom doubled
+    // on the back half, and a fill that hauls you into the next phrase.
+    const beat = 0.42;
+    const phrase = 8;
+    const playPhrase = () => {
+      if (!this.ctx || !this.bossOn) return;
+      for (let b = 0; b < phrase; b++) {
+        const t = b * beat;
+        const down = b % 4 === 0;
+        this.warDrum(master, t, down ? 42 : 52, down ? 0.62 : 0.2, down ? 0.75 : 0.32);
+        if (b >= 4) this.warDrum(master, t + beat * 0.5, 64, 0.16, 0.24); // the back half leans forward
+      }
+      this.warDrum(master, (phrase - 1) * beat + beat * 0.5, 70, 0.3, 0.26);
+      this.warDrum(master, (phrase - 1) * beat + beat * 0.75, 84, 0.42, 0.26);
+    };
+    playPhrase();
+    this.bossTimers.push(setInterval(playPhrase, phrase * beat * 1000));
+  }
+
+  stopBossDrums() {
+    if (!this.bossOn) return;
+    this.bossOn = false;
+    this.bossTimers.forEach((t) => clearInterval(t));
+    this.bossTimers = [];
+    if (this.ctx && this.bossFader) {
+      const now = this.ctx.currentTime;
+      try {
+        this.bossFader.gain.cancelScheduledValues(now);
+        this.bossFader.gain.setValueAtTime(this.bossFader.gain.value, now);
+        this.bossFader.gain.linearRampToValueAtTime(0.0001, now + Sfx.BOSS_FADE);
+      } catch { /* param busy — the teardown below still silences it */ }
+    }
+    this.bossFader = null;
+    const nodes = this.bossNodes;
+    this.bossNodes = [];
+    setTimeout(() => {
+      nodes.forEach((n) => {
+        try { (n as unknown as { stop?: () => void }).stop?.(); } catch { /* already stopped */ }
+        try { n.disconnect(); } catch { /* already gone */ }
+      });
+    }, Sfx.BOSS_FADE * 1000 + 200);
   }
 
   private getNoiseBuf(): AudioBuffer {

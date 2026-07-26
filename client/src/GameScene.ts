@@ -3781,6 +3781,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onBossAggro(msg: { kind?: string; name?: string; line?: string }) {
+    // the floors withhold melody entirely, so percussion is the only gear left to shift
+    this.sfx.startBossDrums();
     const line = msg?.line ?? "Meat for the hooks!";
     const name = msg?.name ?? "";
     const cx = this.scale.width / 2;
@@ -3958,6 +3960,7 @@ export class GameScene extends Phaser.Scene {
       if (boss) {
         this.hitStop(120); // the world stops when a boss falls
         this.cameras.main.shake(400, 0.008);
+        this.sfx.stopBossDrums(); // the drums go out with it, and the floor goes quiet again
         this.sfx.roar();
         this.sfx.drop("epic");
         this.lootBurst(msg.x, msg.y, 0xffd54a, 16);

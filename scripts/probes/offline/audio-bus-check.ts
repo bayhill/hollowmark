@@ -27,6 +27,7 @@ class Node {
   gain = new Param(1);
   frequency = new Param(0);
   Q = new Param(1);
+  pan = new Param(0);
   type = "";
   buffer: unknown = null;
   constructor(public kind: string) { nodes.push(this); }
@@ -50,6 +51,7 @@ const ctx = {
   createBufferSource: () => new Node("src"),
   createBiquadFilter: () => new Node("filter"),
   createConvolver: () => new Node("convolver"),
+  createStereoPanner: () => new Node("panner"),
   createBuffer: (ch: number, len: number) => ({
     length: len,
     numberOfChannels: ch,
@@ -92,6 +94,28 @@ async function main() {
          `a sustained layer is bypassing its fader (see the Bus type in client/src/sfx.ts)`);
   }
 
+  // --- ambient voices re-arm themselves on their own clocks, so a floor change has to
+  // call them off or the old palette keeps talking over the new one. Two things stop
+  // them — stopAmbient's cancels, and the bedGen fence for a callback already mid-flight
+  // — and either alone is enough, so this asserts the property rather than a mechanism ---
+  // Walk through five busy palettes, then settle on the void — far and away the sparsest.
+  // Every placed voice builds exactly one panner, so counting panners counts firings: if
+  // the abandoned beds are still talking, the rate gives them away.
+  for (const busy of [6, 9, 12, 2, 13]) {
+    sfx.setAmbient(busy, 0.5);
+    await new Promise((r) => setTimeout(r, 900)); // long enough for voices to fire and re-arm
+  }
+  sfx.setAmbient(7, 0.5); // the void: ~6.5 firings/min, i.e. well under one per 6s
+  await new Promise((r) => setTimeout(r, FADE_MS));
+  const before = nodes.filter((n) => n.kind === "panner").length;
+  await new Promise((r) => setTimeout(r, 6000));
+  const fired = nodes.filter((n) => n.kind === "panner").length - before;
+  // the void alone expects <1 here; five leaked beds would land around a dozen
+  if (fired > 4) {
+    fail(`${fired} voices fired in 6s on the void's palette — abandoned beds are still ` +
+         `scheduling (see stopAmbient's cancels and the bedGen fence in scheduleVoice)`);
+  }
+
   // --- the lobby march must fade out too: its gong is a pluck, and plucks default to
   // wiring themselves straight to the speakers ---
   nodes = [];
@@ -99,13 +123,22 @@ async function main() {
   if (!audible(0).length) fail("lobby theme is silent");
   sfx.stopLobbyTheme();
   await new Promise((r) => setTimeout(r, FADE_MS));
-  const lobbyDry = audible(1.0).filter((n) => {
-    const path = (x: Node, d = 0): boolean =>
-      d <= 24 && (x === speakers || x.outs.some((o) => path(o, d + 1)));
-    return path(n);
-  });
-  const loud = lobbyDry.filter((n) => (n.stopAt ?? 0) > 1.0);
+  // audible() already filters by reachability — anything it still returns is a leak
+  const loud = audible(1.0).filter((n) => (n.stopAt ?? 0) > 1.0);
   if (loud.length) fail(`${loud.length} lobby voices survived the descent fade`);
+
+  // --- boss drums are the third sustained layer, and leaving the floor must take them
+  // with it: a boss you walked away from cannot still be drumming in town ---
+  nodes = [];
+  sfx.setAmbient(3, 0.5);
+  const beforeDrums = nodes.length;
+  sfx.startBossDrums();
+  const drumNodes = new Set(nodes.slice(beforeDrums)); // everything the drum layer built
+  if (!audible(0).some((n) => drumNodes.has(n))) fail("boss drums are silent");
+  sfx.setAmbient(101, 0); // portal home mid-fight
+  await new Promise((r) => setTimeout(r, 2000)); // past BOSS_FADE (1.4s) and its teardown
+  const stillDrumming = audible(2.0).filter((n) => drumNodes.has(n));
+  if (stillDrumming.length) fail("boss drums survived the trip to town");
 
   // --- and the guard in the other direction: gameplay one-shots must still go straight
   // out, not get swallowed by whatever bed happens to be playing ---
