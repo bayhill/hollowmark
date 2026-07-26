@@ -4,7 +4,8 @@
 // probe against it, then the full smoke test. Nothing here touches data/profiles/,
 // so a run can never disturb a real hero.
 //
-//   offline/  pure checks against @hollowmark/common — no server needed
+//   offline/  pure checks against @hollowmark/common (and the client's own pure
+//             modules, e.g. the audio graph) — no server needed
 //   live/     drive the real server through its dev hooks (see TEST_HOOKS in DungeonRoom)
 //
 // Exits non-zero if any gated probe fails, so CI and a human get the same answer.
@@ -39,6 +40,7 @@ const PROBES: Probe[] = [
   { name: "gloves-probe", file: "offline/gloves-probe.ts", live: false },
   { name: "forest-check", file: "offline/forest-check.ts", live: false },
   { name: "pathfind-check", file: "offline/pathfind-check.ts", live: false },
+  { name: "audio-bus-check", file: "offline/audio-bus-check.ts", live: false },
   { name: "skill-balance", file: "offline/skill-balance.ts", live: false },
   { name: "balance-check", file: "offline/balance-check.ts", live: false, report: true },
 

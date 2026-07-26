@@ -1,6 +1,14 @@
 // Tiny WebAudio synth — placeholder sound effects until real audio assets exist.
 // A single shared instance (see `sfx` below) is used everywhere so the AudioContext
 // unlocked by the lobby's first click is the same one the game plays through.
+
+// Where a voice sends its dry and wet signal. Gameplay one-shots pass nothing and go
+// straight to the speakers; anything belonging to a *sustained* layer (the depth bed,
+// the town theme, the lobby march) must pass a Bus instead, so that layer's fader can
+// actually silence it. A voice wired directly to ctx.destination cannot be stopped —
+// that is what left the town guitar ringing over the dungeon for ten seconds.
+type Bus = { dry: AudioNode; wet: AudioNode | null };
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private noiseBuf: AudioBuffer | null = null;
@@ -49,7 +57,7 @@ export class Sfx {
   // the length of one wavelength, averaged (a gentle lowpass) as it recirculates so
   // the highs die before the fundamental. This is the sound of a fingered nylon
   // guitar, and the sound of Tristram.
-  private pluck(freq: number, dur: number, gain = 0.12, damping = 0.995, reverb = 0.55, when = 0) {
+  private pluck(freq: number, dur: number, gain = 0.12, damping = 0.995, reverb = 0.55, when = 0, bus?: Bus) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const sr = ctx.sampleRate;
@@ -74,11 +82,12 @@ export class Sfx {
     const g = ctx.createGain();
     g.gain.value = gain;
     src.connect(body).connect(g);
-    g.connect(ctx.destination);
-    if (this.reverbSend && reverb > 0) {
+    g.connect(bus?.dry ?? ctx.destination);
+    const wet = bus ? bus.wet : this.reverbSend;
+    if (wet && reverb > 0) {
       const s = ctx.createGain();
       s.gain.value = reverb;
-      g.connect(s).connect(this.reverbSend);
+      g.connect(s).connect(wet);
     }
     const t = ctx.currentTime + when;
     src.start(t);
@@ -86,18 +95,21 @@ export class Sfx {
   }
 
   // a run of plucked notes — a reverbed motif, the harp in the dark
-  private pluckSeq(notes: number[], step: number, gain: number, damping = 0.99, reverb = 0.6) {
-    notes.forEach((f, i) => setTimeout(() => this.pluck(f, step * 2.4, gain, damping, reverb), i * step * 1000));
+  private pluckSeq(notes: number[], step: number, gain: number, damping = 0.99, reverb = 0.6, bus?: Bus) {
+    notes.forEach((f, i) =>
+      setTimeout(() => this.pluck(f, step * 2.4, gain, damping, reverb, 0, bus), i * step * 1000)
+    );
   }
 
-  // route a finished gain node to the speakers and (optionally) into the reverb
-  private toOut(g: GainNode, reverb = 0) {
+  // route a finished gain node to the speakers (or to a layer's bus) and into the reverb
+  private toOut(g: GainNode, reverb = 0, bus?: Bus) {
     if (!this.ctx) return;
-    g.connect(this.ctx.destination);
-    if (this.reverbSend && reverb > 0) {
+    g.connect(bus?.dry ?? this.ctx.destination);
+    const wet = bus ? bus.wet : this.reverbSend;
+    if (wet && reverb > 0) {
       const s = this.ctx.createGain();
       s.gain.value = reverb;
-      g.connect(s).connect(this.reverbSend);
+      g.connect(s).connect(wet);
     }
   }
 
@@ -106,33 +118,33 @@ export class Sfx {
   // low creep = subtle unease (a drip, a far whisper); high creep = overt dread
   // (breathing at your neck, a scream down the hall, a sudden wrong chord).
   // ============================================================
-  private creepLayer(creep: number) {
+  private creepLayer(creep: number, bus?: Bus) {
     if (!this.ctx) return;
     const r = Math.random();
     if (creep < 0.34) {
-      if (r < 0.5) this.whisper(0.5);
-      else this.farDrip();
+      if (r < 0.5) this.whisper(0.5, bus);
+      else this.farDrip(bus);
     } else if (creep < 0.67) {
-      if (r < 0.32) this.whisper(0.75);
-      else if (r < 0.55) this.scuttle();
-      else if (r < 0.8) this.distantScream(0.5);
-      else this.boneRattle();
+      if (r < 0.32) this.whisper(0.75, bus);
+      else if (r < 0.55) this.scuttle(bus);
+      else if (r < 0.8) this.distantScream(0.5, bus);
+      else this.boneRattle(bus);
     } else {
-      if (r < 0.22) this.breath();
-      else if (r < 0.42) this.whisper(1);
-      else if (r < 0.58) this.heartbeatFar();
-      else if (r < 0.76) this.distantScream(0.85);
-      else if (r < 0.9) this.scuttle();
-      else this.stinger(); // rare — the wrongness announcing itself
+      if (r < 0.22) this.breath(bus);
+      else if (r < 0.42) this.whisper(1, bus);
+      else if (r < 0.58) this.heartbeatFar(bus);
+      else if (r < 0.76) this.distantScream(0.85, bus);
+      else if (r < 0.9) this.scuttle(bus);
+      else this.stinger(bus); // rare — the wrongness announcing itself
     }
   }
 
-  private farDrip() {
-    this.tone(1500, 900, 0.08, "sine", 0.018);
+  private farDrip(bus?: Bus) {
+    this.tone(1500, 900, 0.08, "sine", 0.018, bus);
   }
 
   // a voice you can't quite make out — two breathy band-passed bursts, drenched
-  private whisper(intensity = 0.7) {
+  private whisper(intensity = 0.7, bus?: Bus) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -151,14 +163,14 @@ export class Sfx {
       g.gain.linearRampToValueAtTime(0.02 * intensity, t0 + 0.08);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
       src.connect(f).connect(g);
-      this.toOut(g, 0.85);
+      this.toOut(g, 0.85, bus);
       src.start(t0);
       src.stop(t0 + 0.5);
     }
   }
 
   // a far cry that swells and breaks — sawtooth through a formant, all reverb tail
-  private distantScream(intensity = 0.6) {
+  private distantScream(intensity = 0.6, bus?: Bus) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -176,13 +188,13 @@ export class Sfx {
     g.gain.linearRampToValueAtTime(0.016 * intensity, now + 0.4);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
     o.connect(f).connect(g);
-    this.toOut(g, 0.95);
+    this.toOut(g, 0.95, bus);
     o.start(now);
     o.stop(now + 1.6);
   }
 
   // rapid dry ticks — something on many legs, close
-  private scuttle() {
+  private scuttle(bus?: Bus) {
     const n = 5 + Math.floor(Math.random() * 5);
     for (let i = 0; i < n; i++) {
       setTimeout(() => {
@@ -198,7 +210,7 @@ export class Sfx {
         g.gain.setValueAtTime(0.03, now);
         g.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
         src.connect(f).connect(g);
-        this.toOut(g, 0.25);
+        this.toOut(g, 0.25, bus);
         src.start(now);
         src.stop(now + 0.05);
       }, i * (40 + Math.random() * 55));
@@ -206,7 +218,7 @@ export class Sfx {
   }
 
   // dry knocking of bone on stone
-  private boneRattle() {
+  private boneRattle(bus?: Bus) {
     const n = 4 + Math.floor(Math.random() * 4);
     for (let i = 0; i < n; i++) {
       setTimeout(() => {
@@ -223,7 +235,7 @@ export class Sfx {
         g.gain.setValueAtTime(0.024, now);
         g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
         src.connect(f).connect(g);
-        this.toOut(g, 0.5);
+        this.toOut(g, 0.5, bus);
         src.start(now);
         src.stop(now + 0.07);
       }, i * (55 + Math.random() * 45));
@@ -231,7 +243,7 @@ export class Sfx {
   }
 
   // something large, near: a slow inhale, then the exhale
-  private breath() {
+  private breath(bus?: Bus) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -247,7 +259,7 @@ export class Sfx {
       g.gain.linearRampToValueAtTime(0.02, now + t0 + 0.35);
       g.gain.linearRampToValueAtTime(0.0001, now + t0 + 0.9);
       src.connect(f).connect(g);
-      this.toOut(g, 0.4);
+      this.toOut(g, 0.4, bus);
       src.start(now + t0);
       src.stop(now + t0 + 1);
     };
@@ -256,13 +268,13 @@ export class Sfx {
   }
 
   // a slow, quiet heart, somewhere below
-  private heartbeatFar() {
-    this.tone(55, 48, 0.14, "sine", 0.05);
-    setTimeout(() => this.tone(50, 44, 0.12, "sine", 0.04), 230);
+  private heartbeatFar(bus?: Bus) {
+    this.tone(55, 48, 0.14, "sine", 0.05, bus);
+    setTimeout(() => this.tone(50, 44, 0.12, "sine", 0.04, bus), 230);
   }
 
   // a sudden dissonant cluster — rare, deep only
-  private stinger() {
+  private stinger(bus?: Bus) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -275,11 +287,11 @@ export class Sfx {
       g.gain.setValueAtTime(0.03, now);
       g.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
       o.connect(g);
-      this.toOut(g, 0.85);
+      this.toOut(g, 0.85, bus);
       o.start(now);
       o.stop(now + 1);
     }
-    this.noise(0.5, 200, "lowpass", 0.03); // a thud beneath it
+    this.noise(0.5, 200, "lowpass", 0.03, undefined, bus); // a thud beneath it
   }
 
   // --- ambient soundscape, one per depth band ---
@@ -291,10 +303,24 @@ export class Sfx {
   private creep = 0; // 0..1: how far you've fallen — scales the horror
   ambientEnabled = true;
 
+  // The bed's own dry and wet taps, downstream of everything it plays. These — not
+  // `master` — are what the fade rides: `master.gain` carries the breathing LFO as an
+  // audio-rate connection, so ramping it to zero would still leave the LFO's swing
+  // wobbling around silence. A clean fader has to sit after it. (The lobby march has
+  // had this shape all along; the depth bed never did.)
+  private bedDry: GainNode | null = null;
+  private bedWet: GainNode | null = null;
+  private static readonly BED_FADE = 0.7; // seconds — long enough to read as a dissolve
+
+  private bedBus(): Bus | undefined {
+    return this.bedDry ? { dry: this.bedDry, wet: this.bedWet } : undefined;
+  }
+
   // the lobby's impending-doom drums live outside the depth-based ambient system
   private lobbyNodes: AudioNode[] = [];
   private lobbyTimers: Array<ReturnType<typeof setInterval>> = [];
   private lobbyFader: GainNode | null = null;
+  private lobbyWet: GainNode | null = null; // the gong's own send, so it fades with the march
   private lobbyOn = false;
 
   // creep is a 0..1 depth factor; deeper = more frequent, more disturbing ambience.
@@ -313,15 +339,39 @@ export class Sfx {
     return this.ambientEnabled;
   }
 
-  private stopAmbient() {
+  // Fade the bed out, then tear it down. The fade matters more than it looks: the town
+  // theme schedules a whole 10-second loop into the audio graph at once, so at any given
+  // moment most of what you're about to hear is already committed and cannot be cancelled
+  // — it can only be turned down. Ramping the taps silences it; the teardown afterwards
+  // orphans whatever is still scheduled so it plays out into nothing.
+  private stopAmbient(fadeS = Sfx.BED_FADE) {
     this.ambientTimers.forEach((t) => clearInterval(t));
     this.ambientTimers = [];
-    this.ambientNodes.forEach((n) => {
-      try { (n as unknown as { stop?: () => void }).stop?.(); } catch { /* already stopped */ }
-      try { n.disconnect(); } catch { /* already gone */ }
-    });
+    const nodes = this.ambientNodes;
     this.ambientNodes = [];
     this.ambientTheme = -1;
+    const taps = [this.bedDry, this.bedWet].filter(Boolean) as GainNode[];
+    this.bedDry = null;
+    this.bedWet = null;
+    if (this.ctx && taps.length) {
+      const now = this.ctx.currentTime;
+      for (const t of taps) {
+        try {
+          t.gain.cancelScheduledValues(now);
+          t.gain.setValueAtTime(t.gain.value, now);
+          t.gain.linearRampToValueAtTime(0.0001, now + fadeS);
+        } catch { /* param busy — the teardown below still silences it */ }
+      }
+    }
+    const kill = () => {
+      nodes.forEach((n) => {
+        try { (n as unknown as { stop?: () => void }).stop?.(); } catch { /* already stopped */ }
+        try { n.disconnect(); } catch { /* already gone */ }
+      });
+      taps.forEach((n) => { try { n.disconnect(); } catch { /* already gone */ } });
+    };
+    if (this.ctx && taps.length) setTimeout(kill, fadeS * 1000 + 150);
+    else kill(); // nothing was audible yet — no need to wait
   }
 
   private startAmbient(themeIdx: number, force = false) {
@@ -332,15 +382,34 @@ export class Sfx {
     this.ambientTheme = themeIdx;
     const ctx = this.ctx;
 
+    this.ensureReverb();
+    // bedDry → speakers, bedWet → the shared reverb. Everything this bed plays passes
+    // through one of the two, so a single pair of ramps can dissolve the whole layer.
+    // They start near-silent and swell in, which is what makes leaving town a crossfade
+    // rather than a cut: the old bed is fading over exactly the same window.
+    const now = ctx.currentTime;
+    const tap = (dest: AudioNode | null) => {
+      if (!dest) return null;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(1, now + Sfx.BED_FADE);
+      g.connect(dest);
+      return g;
+    };
+    const bedDry = tap(ctx.destination)!;
+    const bedWet = tap(this.reverbSend);
+    this.bedDry = bedDry;
+    this.bedWet = bedWet;
+    const bus: Bus = { dry: bedDry, wet: bedWet };
+
     const master = ctx.createGain();
     master.gain.value = 0.028; // subtle — dread, not a concert
-    master.connect(ctx.destination);
+    master.connect(bedDry);
     // send the whole bed into the reverb so drones and motifs breathe in a real space
-    this.ensureReverb();
-    if (this.reverbSend) {
+    if (bedWet) {
       const send = ctx.createGain();
       send.gain.value = 0.5;
-      master.connect(send).connect(this.reverbSend);
+      master.connect(send).connect(bedWet);
       this.ambientNodes.push(send);
     }
     this.ambientNodes.push(master);
@@ -406,16 +475,16 @@ export class Sfx {
         chords.forEach((ch, bar) => {
           const t0 = bar * barBeats * beat;
           // p–i–m–a fingerpicking: bass, high, mid, top
-          this.pluck(ch[0], 2.2, 0.10, 0.994, 0.5, t0 + 0 * beat);
-          this.pluck(ch[2], 1.5, 0.075, 0.99, 0.55, t0 + 1 * beat);
-          this.pluck(ch[1], 1.5, 0.08, 0.99, 0.55, t0 + 2 * beat);
-          this.pluck(ch[3], 1.6, 0.07, 0.99, 0.55, t0 + 3 * beat);
+          this.pluck(ch[0], 2.2, 0.10, 0.994, 0.5, t0 + 0 * beat, bus);
+          this.pluck(ch[2], 1.5, 0.075, 0.99, 0.55, t0 + 1 * beat, bus);
+          this.pluck(ch[1], 1.5, 0.08, 0.99, 0.55, t0 + 2 * beat, bus);
+          this.pluck(ch[3], 1.6, 0.07, 0.99, 0.55, t0 + 3 * beat, bus);
           if (bar === 0 || bar === 2) {
             // the lead answers on the off-beat, quiet and reverbed
             const n = bar === 0 ? lead[0] : lead[1];
-            this.pluck(n, 2.6, 0.06, 0.992, 0.7, t0 + 2.5 * beat);
+            this.pluck(n, 2.6, 0.06, 0.992, 0.7, t0 + 2.5 * beat, bus);
           }
-          if (bar === 3) this.pluck(lead[3], 2.8, 0.05, 0.992, 0.75, t0 + 3.5 * beat); // a sighing resolve
+          if (bar === 3) this.pluck(lead[3], 2.8, 0.05, 0.992, 0.75, t0 + 3.5 * beat, bus); // a sighing resolve
         });
       };
       playLoop();
@@ -423,7 +492,7 @@ export class Sfx {
       // a distant chapel bell, rarely
       this.ambientTimers.push(
         setInterval(() => {
-          if (this.ctx && Math.random() < 0.35) this.pluck(146.8 * k, 3.4, 0.05, 0.997, 0.8);
+          if (this.ctx && Math.random() < 0.35) this.pluck(146.8 * k, 3.4, 0.05, 0.997, 0.8, 0, bus);
         }, 17000)
       );
       return;
@@ -437,19 +506,19 @@ export class Sfx {
       case 1: // catacombs: cold hollow drone, wind, distant moans
         drone(45, "triangle", 0.5);
         noiseBed(220, 0.22);
-        event = () => this.tone(115, 70, 1.4, "sine", 0.018);
+        event = () => this.tone(115, 70, 1.4, "sine", 0.018, bus);
         motif = [220, 196, 165, 147]; // A minor descent — a dirge
         break;
       case 2: // caves: earth rumble and dripping water
         drone(38, "sine", 0.35);
         noiseBed(150, 0.5);
-        event = () => this.tone(1400, 900, 0.07, "sine", 0.03);
+        event = () => this.tone(1400, 900, 0.07, "sine", 0.03, bus);
         motif = [131, 156, 175, 156]; // C minor sway — stone breathing
         break;
       case 3: // hell: grinding saw drone, deep rumbles
         drone(40, "sawtooth", 0.32);
         noiseBed(120, 0.35);
-        event = () => this.noise(0.9, 90, "lowpass", 0.05);
+        event = () => this.noise(0.9, 90, "lowpass", 0.05, undefined, bus);
         motif = [110, 117, 110, 82]; // half-step menace — the tritone lives here
         motifType = "sawtooth";
         break;
@@ -457,36 +526,36 @@ export class Sfx {
         drone(66, "sine", 0.4);
         drone(99, "triangle", 0.12);
         noiseBed(3000, 0.06);
-        event = () => this.tone(1760, 1750, 0.6, "sine", 0.014);
+        event = () => this.tone(1760, 1750, 0.6, "sine", 0.014, bus);
         motif = [523, 659, 784, 659]; // icy arpeggio, far away
         break;
       case 5: // sanguine: slow heartbeat, choir-ish thirds
         drone(52, "sine", 0.42);
         drone(62.4, "sine", 0.16);
         event = () => {
-          this.tone(58, 50, 0.14, "sine", 0.06); // lub
-          setTimeout(() => this.tone(52, 46, 0.12, "sine", 0.05), 220); // dub
+          this.tone(58, 50, 0.14, "sine", 0.06, bus); // lub
+          setTimeout(() => this.tone(52, 46, 0.12, "sine", 0.05, bus), 220); // dub
         };
         motif = [175, 208, 175, 147]; // F minor lament
         break;
       case 6: // swamp: croaks, bubbles, a waterlogged bass
         drone(42, "triangle", 0.4);
         noiseBed(300, 0.3);
-        event = () => this.tone(90 + Math.random() * 60, 70, 0.18, "square", 0.02);
+        event = () => this.tone(90 + Math.random() * 60, 70, 0.18, "square", 0.02, bus);
         motif = [98, 110, 98, 87]; // something large turning over in the water
         motifType = "triangle";
         break;
       case 7: // void: near-silence, detuned beating, wrong intervals
         drone(48, "sine", 0.35);
         drone(48.7, "sine", 0.35); // beats against itself — unease by physics
-        event = () => this.tone(1046, 1044, 1.8, "sine", 0.008);
+        event = () => this.tone(1046, 1044, 1.8, "sine", 0.008, bus);
         motif = [233, 220, 247, 208]; // no home note; never resolves
         break;
       case 8: // the abyss: sub-bass pressure, whispers at the edge of hearing
         drone(31, "sine", 0.55);
         drone(31.4, "sine", 0.3); // beat frequency: the walls breathe
         noiseBed(180, 0.2);
-        event = () => this.noise(0.5, 480, "bandpass", 0.02); // something whispered
+        event = () => this.noise(0.5, 480, "bandpass", 0.02, undefined, bus); // something whispered
         motif = [147, 139, 131, 123]; // a chromatic descent — the stairs keep going
         motifType = "sine";
         break;
@@ -496,10 +565,10 @@ export class Sfx {
         event = () => {
           if (Math.random() < 0.5) {
             // a crow that saw something
-            this.tone(620, 480, 0.09, "square", 0.012);
-            setTimeout(() => this.tone(590, 460, 0.08, "square", 0.01), 180);
+            this.tone(620, 480, 0.09, "square", 0.012, bus);
+            setTimeout(() => this.tone(590, 460, 0.08, "square", 0.01, bus), 180);
           } else {
-            this.tone(330, 328, 1.2, "sine", 0.008); // wind singing in a dead tree
+            this.tone(330, 328, 1.2, "sine", 0.008, bus); // wind singing in a dead tree
           }
         };
         motif = [196, 220, 247, 196]; // G minor pastoral — pretty, but wrong
@@ -510,9 +579,9 @@ export class Sfx {
         noiseBed(1400, 0.12); // wind over hardpan
         event = () => {
           if (Math.random() < 0.4) {
-            this.tone(880, 640, 0.5, "sine", 0.007); // a vulture's distant keen
+            this.tone(880, 640, 0.5, "sine", 0.007, bus); // a vulture's distant keen
           } else {
-            this.noise(0.5, 1800, "highpass", 0.015); // sand hissing across stone
+            this.noise(0.5, 1800, "highpass", 0.015, undefined, bus); // sand hissing across stone
           }
         };
         motif = [175, 165, 147, 165]; // F minor mirage — heat with a pulse
@@ -523,9 +592,9 @@ export class Sfx {
         noiseBed(180, 0.28);
         event = () => {
           if (Math.random() < 0.5) {
-            this.noise(0.35, 900, "bandpass", 0.02); // cloth dragging over stone
+            this.noise(0.35, 900, "bandpass", 0.02, undefined, bus); // cloth dragging over stone
           } else {
-            this.tone(98, 96, 1.6, "sine", 0.012); // a sarcophagus settling
+            this.tone(98, 96, 1.6, "sine", 0.012, bus); // a sarcophagus settling
           }
         };
         motif = [147, 139, 123, 110]; // D minor descent into the dust
@@ -535,10 +604,10 @@ export class Sfx {
         noiseBed(1100, 0.2); // the canopy dripping
         event = () => {
           if (Math.random() < 0.5) {
-            this.tone(1240, 1180, 0.06, "sine", 0.014); // something bright calls once
-            setTimeout(() => this.tone(1350, 1240, 0.05, "sine", 0.01), 140);
+            this.tone(1240, 1180, 0.06, "sine", 0.014, bus); // something bright calls once
+            setTimeout(() => this.tone(1350, 1240, 0.05, "sine", 0.01, bus), 140);
           } else {
-            this.tone(220, 218, 1.4, "sine", 0.009); // the river under everything
+            this.tone(220, 218, 1.4, "sine", 0.009, bus); // the river under everything
           }
         };
         motif = [220, 262, 247, 220]; // A dorian — green, wet, alive
@@ -549,9 +618,9 @@ export class Sfx {
         noiseBed(300, 0.3);
         event = () => {
           if (Math.random() < 0.6) {
-            this.tone(1600, 1000, 0.08, "sine", 0.026); // a drop into deep water
+            this.tone(1600, 1000, 0.08, "sine", 0.026, bus); // a drop into deep water
           } else {
-            this.tone(73, 72, 2.0, "sine", 0.014); // the god turning over in its sleep
+            this.tone(73, 72, 2.0, "sine", 0.014, bus); // the god turning over in its sleep
           }
         };
         motif = [131, 123, 110, 123]; // C minor undertow
@@ -562,9 +631,9 @@ export class Sfx {
         noiseBed(500, 0.22);
         event = () => {
           if (Math.random() < 0.5) {
-            this.noise(1.1, 70, "lowpass", 0.045); // something enormous falling, far away
+            this.noise(1.1, 70, "lowpass", 0.045, undefined, bus); // something enormous falling, far away
           } else {
-            this.tone(150, 90, 0.7, "sawtooth", 0.012); // the breach exhaling
+            this.tone(150, 90, 0.7, "sawtooth", 0.012, bus); // the breach exhaling
           }
         };
         motif = [110, 104, 110, 82]; // the tritone again — closer now
@@ -573,7 +642,7 @@ export class Sfx {
       default: // cathedral: low organ-ish hum, distant bell
         drone(55, "sine", 0.5);
         drone(82.5, "sine", 0.18);
-        event = () => this.tone(523, 522, 2.2, "sine", 0.012);
+        event = () => this.tone(523, 522, 2.2, "sine", 0.012, bus);
         motif = [262, 233, 196, 220]; // plainsong fragment
         break;
     }
@@ -591,7 +660,7 @@ export class Sfx {
     this.ambientTimers.push(
       setInterval(() => {
         if (this.ctx && Math.random() < 0.5 && motif.length) {
-          this.pluckSeq(motif, 0.85, 0.05, motifMuted, 0.7);
+          this.pluckSeq(motif, 0.85, 0.05, motifMuted, 0.7, bus);
         }
       }, Math.round(21000 - creep * 9000)) // more insistent the deeper you go
     );
@@ -600,7 +669,7 @@ export class Sfx {
     if (creep > 0.06) {
       this.ambientTimers.push(
         setInterval(() => {
-          if (this.ctx && Math.random() < 0.3 + creep * 0.5) this.creepLayer(creep);
+          if (this.ctx && Math.random() < 0.3 + creep * 0.5) this.creepLayer(creep, bus);
         }, Math.round(13000 - creep * 7000)) // 13s → ~6s at the bottom
       );
     }
@@ -663,6 +732,19 @@ export class Sfx {
     }
     this.lobbyFader = fader;
     this.lobbyNodes.push(fader);
+
+    // the gong is a pluck, and a pluck left to its own devices wires itself straight to
+    // the speakers — which is how it survived the descent fade. Give it a wet tap that
+    // fades alongside the fader, and a dry path that lands post-master (so it keeps its
+    // own level rather than being scaled and breathed on by the drum bed).
+    const lobbyWet = this.reverbSend ? ctx.createGain() : null;
+    if (lobbyWet) {
+      lobbyWet.gain.value = 1;
+      lobbyWet.connect(this.reverbSend!);
+      this.lobbyWet = lobbyWet;
+      this.lobbyNodes.push(lobbyWet);
+    }
+    const gongBus: Bus = { dry: fader, wet: lobbyWet };
 
     const master = ctx.createGain();
     master.gain.value = 0.4;
@@ -745,7 +827,7 @@ export class Sfx {
     // --- a distant war-gong, tolling rarely over the march ---
     this.lobbyTimers.push(
       setInterval(() => {
-        if (this.ctx && this.lobbyOn && Math.random() < 0.6) this.pluck(55, 3.6, 0.06, 0.997, 0.9);
+        if (this.ctx && this.lobbyOn && Math.random() < 0.6) this.pluck(55, 3.6, 0.06, 0.997, 0.9, 0, gongBus);
       }, 8000)
     );
   }
@@ -756,15 +838,19 @@ export class Sfx {
     this.lobbyTimers.forEach((t) => clearInterval(t));
     this.lobbyTimers = [];
     // fade the fader out, then tear the nodes down — no click when town takes over
-    if (this.ctx && this.lobbyFader) {
+    if (this.ctx) {
       const now = this.ctx.currentTime;
-      try {
-        this.lobbyFader.gain.cancelScheduledValues(now);
-        this.lobbyFader.gain.setValueAtTime(this.lobbyFader.gain.value, now);
-        this.lobbyFader.gain.linearRampToValueAtTime(0.0001, now + 0.6);
-      } catch { /* param busy — the teardown below still silences it */ }
+      for (const t of [this.lobbyFader, this.lobbyWet]) {
+        if (!t) continue;
+        try {
+          t.gain.cancelScheduledValues(now);
+          t.gain.setValueAtTime(t.gain.value, now);
+          t.gain.linearRampToValueAtTime(0.0001, now + 0.6);
+        } catch { /* param busy — the teardown below still silences it */ }
+      }
     }
     this.lobbyFader = null;
+    this.lobbyWet = null;
     const nodes = this.lobbyNodes;
     this.lobbyNodes = [];
     setTimeout(() => {
@@ -784,7 +870,7 @@ export class Sfx {
     return this.noiseBuf;
   }
 
-  private noise(dur: number, freq: number, type: BiquadFilterType, gain = 0.08, sweepTo?: number) {
+  private noise(dur: number, freq: number, type: BiquadFilterType, gain = 0.08, sweepTo?: number, bus?: Bus) {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     const src = this.ctx.createBufferSource();
@@ -796,12 +882,12 @@ export class Sfx {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(gain, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(f).connect(g).connect(this.ctx.destination);
+    src.connect(f).connect(g).connect(bus?.dry ?? this.ctx.destination);
     src.start(now);
     src.stop(now + dur);
   }
 
-  private tone(from: number, to: number, dur: number, type: OscillatorType = "square", gain = 0.05) {
+  private tone(from: number, to: number, dur: number, type: OscillatorType = "square", gain = 0.05, bus?: Bus) {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
@@ -811,7 +897,7 @@ export class Sfx {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(gain, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    o.connect(g).connect(this.ctx.destination);
+    o.connect(g).connect(bus?.dry ?? this.ctx.destination);
     o.start(now);
     o.stop(now + dur);
   }
