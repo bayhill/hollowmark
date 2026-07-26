@@ -94,13 +94,6 @@ export class Sfx {
     src.stop(t + dur + 0.05);
   }
 
-  // a run of plucked notes — a reverbed motif, the harp in the dark
-  private pluckSeq(notes: number[], step: number, gain: number, damping = 0.99, reverb = 0.6, bus?: Bus) {
-    notes.forEach((f, i) =>
-      setTimeout(() => this.pluck(f, step * 2.4, gain, damping, reverb, 0, bus), i * step * 1000)
-    );
-  }
-
   // route a finished gain node to the speakers (or to a layer's bus) and into the reverb
   private toOut(g: GainNode, reverb = 0, bus?: Bus) {
     if (!this.ctx) return;
@@ -405,7 +398,7 @@ export class Sfx {
     const master = ctx.createGain();
     master.gain.value = 0.028; // subtle — dread, not a concert
     master.connect(bedDry);
-    // send the whole bed into the reverb so drones and motifs breathe in a real space
+    // send the whole bed into the reverb so the drones breathe in a real space
     if (bedWet) {
       const send = ctx.createGain();
       send.gain.value = 0.5;
@@ -498,66 +491,55 @@ export class Sfx {
       return;
     }
 
-    // every dungeon has its own key: a drone bed, an event, and a slow motif
+    // every dungeon has its own key: a drone bed and its own vocabulary of events.
+    // No melody down here — a recurring phrase is the one thing in the mix that can't
+    // help but sound authored, and withholding it is what makes town mean something.
     let event: () => void;
-    let motif: number[] = [];
-    let motifType: OscillatorType = "sine";
     switch (themeIdx) {
       case 1: // catacombs: cold hollow drone, wind, distant moans
         drone(45, "triangle", 0.5);
         noiseBed(220, 0.22);
         event = () => this.tone(115, 70, 1.4, "sine", 0.018, bus);
-        motif = [220, 196, 165, 147]; // A minor descent — a dirge
         break;
       case 2: // caves: earth rumble and dripping water
         drone(38, "sine", 0.35);
         noiseBed(150, 0.5);
         event = () => this.tone(1400, 900, 0.07, "sine", 0.03, bus);
-        motif = [131, 156, 175, 156]; // C minor sway — stone breathing
         break;
       case 3: // hell: grinding saw drone, deep rumbles
         drone(40, "sawtooth", 0.32);
         noiseBed(120, 0.35);
         event = () => this.noise(0.9, 90, "lowpass", 0.05, undefined, bus);
-        motif = [110, 117, 110, 82]; // half-step menace — the tritone lives here
-        motifType = "sawtooth";
         break;
       case 4: // frozen: glassy high shimmer, crystalline pings
         drone(66, "sine", 0.4);
-        drone(99, "triangle", 0.12);
+        drone(66.5, "sine", 0.14); // was a bare fifth; now it just beats against itself
         noiseBed(3000, 0.06);
         event = () => this.tone(1760, 1750, 0.6, "sine", 0.014, bus);
-        motif = [523, 659, 784, 659]; // icy arpeggio, far away
         break;
-      case 5: // sanguine: slow heartbeat, choir-ish thirds
+      case 5: // sanguine: a slow heartbeat under pressure
         drone(52, "sine", 0.42);
-        drone(62.4, "sine", 0.16);
+        drone(52.4, "sine", 0.15); // was a minor third — too close to a chord to ignore
         event = () => {
           this.tone(58, 50, 0.14, "sine", 0.06, bus); // lub
           setTimeout(() => this.tone(52, 46, 0.12, "sine", 0.05, bus), 220); // dub
         };
-        motif = [175, 208, 175, 147]; // F minor lament
         break;
       case 6: // swamp: croaks, bubbles, a waterlogged bass
         drone(42, "triangle", 0.4);
         noiseBed(300, 0.3);
         event = () => this.tone(90 + Math.random() * 60, 70, 0.18, "square", 0.02, bus);
-        motif = [98, 110, 98, 87]; // something large turning over in the water
-        motifType = "triangle";
         break;
       case 7: // void: near-silence, detuned beating, wrong intervals
         drone(48, "sine", 0.35);
         drone(48.7, "sine", 0.35); // beats against itself — unease by physics
         event = () => this.tone(1046, 1044, 1.8, "sine", 0.008, bus);
-        motif = [233, 220, 247, 208]; // no home note; never resolves
         break;
       case 8: // the abyss: sub-bass pressure, whispers at the edge of hearing
         drone(31, "sine", 0.55);
         drone(31.4, "sine", 0.3); // beat frequency: the walls breathe
         noiseBed(180, 0.2);
         event = () => this.noise(0.5, 480, "bandpass", 0.02, undefined, bus); // something whispered
-        motif = [147, 139, 131, 123]; // a chromatic descent — the stairs keep going
-        motifType = "sine";
         break;
       case 9: // forest: wind through leaves, a crow somewhere, uneasy pastoral
         drone(58, "triangle", 0.3);
@@ -571,8 +553,6 @@ export class Sfx {
             this.tone(330, 328, 1.2, "sine", 0.008, bus); // wind singing in a dead tree
           }
         };
-        motif = [196, 220, 247, 196]; // G minor pastoral — pretty, but wrong
-        motifType = "triangle";
         break;
       case 10: // sunscar wastes: dry wind, heat shimmer, something circling
         drone(52, "triangle", 0.28);
@@ -584,8 +564,6 @@ export class Sfx {
             this.noise(0.5, 1800, "highpass", 0.015, undefined, bus); // sand hissing across stone
           }
         };
-        motif = [175, 165, 147, 165]; // F minor mirage — heat with a pulse
-        motifType = "triangle";
         break;
       case 11: // the tombs: dead air, dust, the shift of old cloth
         drone(42, "sine", 0.42);
@@ -597,7 +575,6 @@ export class Sfx {
             this.tone(98, 96, 1.6, "sine", 0.012, bus); // a sarcophagus settling
           }
         };
-        motif = [147, 139, 123, 110]; // D minor descent into the dust
         break;
       case 12: // the drowned green: rain on leaves, river, unseen birds
         drone(60, "triangle", 0.26);
@@ -610,8 +587,6 @@ export class Sfx {
             this.tone(220, 218, 1.4, "sine", 0.009, bus); // the river under everything
           }
         };
-        motif = [220, 262, 247, 220]; // A dorian — green, wet, alive
-        motifType = "triangle";
         break;
       case 13: // the ziggurat: flooded stone, deep hum, dripping altars
         drone(36, "sine", 0.44);
@@ -623,11 +598,10 @@ export class Sfx {
             this.tone(73, 72, 2.0, "sine", 0.014, bus); // the god turning over in its sleep
           }
         };
-        motif = [131, 123, 110, 123]; // C minor undertow
         break;
       case 14: // the ashfall road: cinders, far-off collapse, the breach breathing
         drone(38, "sawtooth", 0.24);
-        drone(57, "sine", 0.18);
+        drone(55.4, "sine", 0.18); // a fifth, pulled flat — keeps the body, loses the chord
         noiseBed(500, 0.22);
         event = () => {
           if (Math.random() < 0.5) {
@@ -636,14 +610,11 @@ export class Sfx {
             this.tone(150, 90, 0.7, "sawtooth", 0.012, bus); // the breach exhaling
           }
         };
-        motif = [110, 104, 110, 82]; // the tritone again — closer now
-        motifType = "sawtooth";
         break;
       default: // cathedral: low organ-ish hum, distant bell
         drone(55, "sine", 0.5);
         drone(82.5, "sine", 0.18);
         event = () => this.tone(523, 522, 2.2, "sine", 0.012, bus);
-        motif = [262, 233, 196, 220]; // plainsong fragment
         break;
     }
 
@@ -653,16 +624,6 @@ export class Sfx {
       setInterval(() => {
         if (this.ctx && Math.random() < 0.5 + creep * 0.35) event();
       }, Math.round(8000 - creep * 3500)) // 8s near the surface → ~4.5s in the deep
-    );
-    // the motif drifts in rarely — a plucked line in a reverbed hall, music you
-    // only half-notice. Heavier damping on the menacing (sawtooth) bands keeps them muted.
-    const motifMuted = motifType === "sawtooth" ? 0.97 : 0.992;
-    this.ambientTimers.push(
-      setInterval(() => {
-        if (this.ctx && Math.random() < 0.5 && motif.length) {
-          this.pluckSeq(motif, 0.85, 0.05, motifMuted, 0.7, bus);
-        }
-      }, Math.round(21000 - creep * 9000)) // more insistent the deeper you go
     );
     // the deep listens back — a separate layer of creeping horror that only wakes
     // once you're past the surface, and grows more frequent and more overt with depth.
